@@ -1,10 +1,11 @@
 import { spawn } from "child_process";
-import net from "node:net";
 import path from "path";
 import process from "process";
 
-const port = Number.parseInt(process.env.PORT ?? "3000", 10);
-const hostname = process.env.HOSTNAME ?? "localhost";
+// Render automatically sets PORT, use it directly
+const port = process.env.PORT || "3000";
+// On Render and other cloud platforms, bind to 0.0.0.0 to accept external connections
+const hostname = process.env.HOSTNAME || (process.env.NODE_ENV === "production" ? "0.0.0.0" : "localhost");
 
 // If NODE_ENV isn't set, default to development for local runs.
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "development";
@@ -33,37 +34,11 @@ process.on("uncaughtException", (err) => {
 // To ensure "node server.js" always boots the full app reliably:
 // - dev: spawn `next dev`
 // - prod: spawn `next start`
-async function isPortFree(p) {
-  return await new Promise((resolve) => {
-    const srv = net.createServer();
-    srv.once("error", () => resolve(false));
-    srv.once("listening", () => srv.close(() => resolve(true)));
-    srv.listen(p, hostname);
-  });
-}
-
-async function pickPort(preferredPort, maxTries = 20) {
-  for (let i = 0; i <= maxTries; i += 1) {
-    const candidate = preferredPort + i;
-    // eslint-disable-next-line no-await-in-loop
-    if (await isPortFree(candidate)) return candidate;
-  }
-  throw new Error(
-    `No free port found in range ${preferredPort}-${preferredPort + maxTries}`
-  );
-}
-
-const chosenPort = await pickPort(port);
-if (chosenPort !== port) {
-  // eslint-disable-next-line no-console
-  console.warn(
-    `Port ${port} is in use. Falling back to ${chosenPort}. (You can set PORT to override.)`
-  );
-}
-
 const args = dev
-  ? ["dev", "-p", String(chosenPort), "-H", hostname]
-  : ["start", "-p", String(chosenPort), "-H", hostname];
+  ? ["dev", "-p", port, "-H", hostname]
+  : ["start", "-p", port, "-H", hostname];
+
+console.log(`Starting Next.js in ${dev ? "development" : "production"} mode on ${hostname}:${port}`);
 
 const child = spawn(nextBin, args, {
   stdio: "inherit",

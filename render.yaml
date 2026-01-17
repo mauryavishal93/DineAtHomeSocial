@@ -4,5 +4,10 @@ services:
     env: node
     buildCommand: npm install && npm run build
     startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOSTNAME
+        value: 0.0.0.0
     # Root directory is the repository root (where package.json is located)
     # No rootDir specified means it uses the repo root
