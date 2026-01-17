@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 251 250 248; /* sand-50 */
+  --fg: 31 36 48; /* ink-900 */
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  color: rgb(var(--fg));
+  background:
+    radial-gradient(1000px 700px at 10% 0%, rgba(219, 199, 173, 0.45), transparent 55%),
+    radial-gradient(800px 600px at 80% 10%, rgba(183, 138, 89, 0.20), transparent 50%),
+    rgb(var(--bg));
+  font-family: theme(fontFamily.sans);
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+/* Subtle "paper grain" using layered gradients (no external images). */
+.grain {
+  position: relative;
+}
+.grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.20;
+  mix-blend-mode: multiply;
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      rgba(31, 36, 48, 0.018) 0px,
+      rgba(31, 36, 48, 0.018) 1px,
+      transparent 1px,
+      transparent 5px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(31, 36, 48, 0.016) 0px,
+      rgba(31, 36, 48, 0.016) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+}
+
+.mask-fade-b {
+  -webkit-mask-image: linear-gradient(to bottom, black 75%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 75%, transparent 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-floaty,
+  .animate-shimmer,
+  .animate-blob {
+    animation: none !important;
+  }
+}
+
+.shine {
+  position: relative;
+  overflow: hidden;
+}
+.shine::after {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.35),
+    transparent
+  );
+  transform: translateX(-120%) rotate(20deg);
+  transition: transform 600ms ease;
+}
+.shine:hover::after {
+  transform: translateX(120%) rotate(20deg);
+}
