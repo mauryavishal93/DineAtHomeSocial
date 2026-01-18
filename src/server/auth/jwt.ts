@@ -2,13 +2,10 @@ import { SignJWT, jwtVerify } from "jose";
 import crypto from "crypto";
 import { env } from "@/server/env";
 import type { Role } from "@/server/models/_types";
-import type { AdminRole } from "@/server/models/Admin";
 
 export type AccessTokenClaims = {
-  sub: string; // userId or adminId
+  sub: string; // userId
   role: Role;
-  adminRole?: string; // For admin users
-  username?: string; // For admin users
 };
 
 function enc(secret: string) {
@@ -16,11 +13,7 @@ function enc(secret: string) {
 }
 
 export async function signAccessToken(claims: AccessTokenClaims) {
-  const payload: any = { role: claims.role };
-  if (claims.adminRole) payload.adminRole = claims.adminRole;
-  if (claims.username) payload.username = claims.username;
-  
-  return new SignJWT(payload)
+  return new SignJWT({ role: claims.role })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(claims.sub)
     .setIssuedAt()
@@ -43,11 +36,8 @@ export async function verifyAccessToken(token: string) {
   const res = await jwtVerify(token, enc(env.JWT_ACCESS_SECRET));
   const userId = res.payload.sub;
   const role = (res.payload as { role?: Role }).role;
-  const adminRole = (res.payload as { adminRole?: string }).adminRole;
-  const username = (res.payload as { username?: string }).username;
   if (!userId || typeof userId !== "string" || !role) throw new Error("Invalid token");
-  const typedAdminRole: AdminRole | undefined = adminRole as AdminRole | undefined;
-  return { userId, role, adminRole: typedAdminRole, username };
+  return { userId, role };
 }
 
 export async function verifyRefreshToken(token: string) {
