@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken } from "@/lib/session";
 
@@ -41,6 +42,61 @@ export function EventsTab() {
     setLoading(false);
   }
 
+  async function approveEvent(eventId: string) {
+    const token = getAccessToken();
+    if (!token) return;
+
+    const res = await apiFetch(`/api/admin/events/${eventId}/approve`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      loadEvents();
+    } else {
+      alert(`Failed to approve event: ${res.error}`);
+    }
+  }
+
+  async function rejectEvent(eventId: string) {
+    const token = getAccessToken();
+    if (!token) return;
+
+    const reason = prompt("Enter rejection reason (optional):");
+    if (reason === null) return;
+
+    const res = await apiFetch(`/api/admin/events/${eventId}/reject`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ reason: reason || undefined })
+    });
+    if (res.ok) {
+      loadEvents();
+    } else {
+      alert(`Failed to reject event: ${res.error}`);
+    }
+  }
+
+  async function cancelEvent(eventId: string) {
+    const token = getAccessToken();
+    if (!token) return;
+
+    if (!confirm("Are you sure you want to cancel this event? All bookings will be cancelled.")) return;
+
+    const reason = prompt("Enter cancellation reason (optional):");
+    if (reason === null) return;
+
+    const res = await apiFetch(`/api/admin/events/${eventId}/cancel`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ reason: reason || undefined })
+    });
+    if (res.ok) {
+      loadEvents();
+    } else {
+      alert(`Failed to cancel event: ${res.error}`);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex gap-4">
@@ -71,6 +127,7 @@ export function EventsTab() {
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Status</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Bookings</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Revenue</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-sand-200">
@@ -98,6 +155,37 @@ export function EventsTab() {
                   <td className="px-4 py-3 text-sm text-ink-900">{event.bookingsCount}</td>
                   <td className="px-4 py-3 text-sm text-ink-900">
                     ₹{(event.revenue / 100).toFixed(2)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      {event.status !== "OPEN" && event.status !== "CANCELLED" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => approveEvent(event._id)}
+                        >
+                          Approve
+                        </Button>
+                      )}
+                      {event.status !== "CANCELLED" && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => rejectEvent(event._id)}
+                          >
+                            Reject
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => cancelEvent(event._id)}
+                          >
+                            Cancel
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

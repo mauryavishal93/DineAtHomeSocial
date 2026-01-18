@@ -7,6 +7,8 @@ import { Booking } from "@/server/models/Booking";
 import { Payment } from "@/server/models/Payment";
 import { Venue } from "@/server/models/Venue";
 import { AdminAction } from "@/server/models/AdminAction";
+import { Feedback } from "@/server/models/Feedback";
+import { Admin } from "@/server/models/Admin";
 import type { Role, AccountStatus } from "@/server/models/_types";
 
 const HOST_REGISTRATION_FEE = 50000; // 500 INR in paise
@@ -297,7 +299,8 @@ export async function listUsers(filters: {
 export async function updateUserStatus(
   userId: string,
   status: AccountStatus,
-  adminUserId: string
+  adminId: string,
+  adminUsername: string
 ): Promise<void> {
   await connectMongo();
 
@@ -310,14 +313,22 @@ export async function updateUserStatus(
 
   // Log admin action
   await AdminAction.create({
-    adminUserId,
-    actionType: "UPDATE_USER_STATUS",
+    adminUserId: adminId,
+    adminUsername,
+    actionType: status === "SUSPENDED" ? "SUSPEND_USER" : "ACTIVATE_USER",
+    targetType: "USER",
     targetUserId: userId,
-    metadata: { oldStatus, newStatus: status }
+    targetId: userId,
+    metadata: { oldStatus, newStatus: status },
+    description: `${status === "SUSPENDED" ? "Suspended" : "Activated"} user ${userId}`
   });
 }
 
-export async function verifyUser(userId: string, adminUserId: string): Promise<void> {
+export async function verifyUser(
+  userId: string,
+  adminId: string,
+  adminUsername: string
+): Promise<void> {
   await connectMongo();
 
   const user = await User.findById(userId);
@@ -341,10 +352,14 @@ export async function verifyUser(userId: string, adminUserId: string): Promise<v
 
   // Log admin action
   await AdminAction.create({
-    adminUserId,
+    adminUserId: adminId,
+    adminUsername,
     actionType: "VERIFY_USER",
+    targetType: "USER",
     targetUserId: userId,
-    metadata: { role: user.role }
+    targetId: userId,
+    metadata: { role: user.role },
+    description: `Verified user ${userId}`
   });
 }
 
@@ -840,5 +855,870 @@ export async function getAdminEventDetail(eventId: string): Promise<AdminEventDe
       pendingBookings,
       cancelledBookings
     }
+  };
+}
+
+// ==========================================
+// BOOKINGS MANAGEMENT
+// ==========================================
+
+export interface BookingListItem {
+  _id: string;
+  eventSlotId: string;
+  eventName: string;
+  hostUserId: string;
+  hostName: string;
+  hostEmail: string;
+  guestUserId: string;
+  guestName: string;
+  guestEmail: string;
+  guestMobile: string;
+  seats: number;
+  amountTotal: number;
+  status: string;
+  paymentStatus: string;
+  paymentId: string | null;
+  createdAt: Date;
+  eventStartAt: Date;
+}
+
+export async function listBookings(filters: {
+  status?: string;
+  eventId?: string;
+  hostUserId?: string;
+  guestUserId?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ bookings: BookingListItem[]; total: number }> {
+  await connectMongo();
+
+  const page = filters.page || 1;
+  const limit = filters.limit || 20;
+  const skip = (page - 1) * limit;
+
+  const query: any = {};
+  if (filters.status) query.status = filters.status;
+  if (filters.eventId) query.eventSlotId = filters.eventId;
+  if (filters.hostUserId) query.hostUserId = filters.hostUserId;
+  if (filters.guestUserId) query.guestUserId = filters.guestUserId;
+
+  const total = await Booking.countDocuments(query);
+  const bookings = await Booking.find(query)
+    .populate("eventSlotId", "eventName startAt")
+    .populate("hostUserId", "email")
+    .populate("guestUserId", "email mobile")
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  const hostUserIds = [...new Set(bookings.map((b: any) => String(b.hostUserId?._id || b.hostUserId)))];
+  const hostProfiles = await HostProfile.find({ userId: { $in: hostUserIds } }).lean();
+  const hostNameMap = new Map();
+  hostProfiles.forEach((hp: any) => {
+    const name = `${hp.firstName || ""} ${hp.lastName || ""}`.trim();
+    if (name) hostNameMap.set(String(hp.userId), name);
+  });
+
+  const bookingsWithDetails: BookingListItem[] = bookings.map((b: any) => {
+    const event = b.eventSlotId as any;
+    const hostUser = b.hostUserId as any;
+    const guestUser = b.guestUserId as any;
+    const hostUserIdStr = String(hostUser?._id || b.hostUserId);
+    
+    return {
+      _id: String(b._id),
+      eventSlotId: event ? String(event._id) : String(b.eventSlotId),
+      eventName: event?.eventName || "N/A",
+      hostUserId: hostUserIdStr,
+      hostName: hostNameMap.get(hostUserIdStr) || "N/A",
+      hostEmail: hostUser?.email || "",
+      guestUserId: String(guestUser?._id || b.guestUserId),
+      guestName: b.guestName,
+      guestEmail: guestUser?.email || "",
+      guestMobile: guestUser?.mobile || b.guestMobile || "",
+      seats: b.seats,
+      amountTotal: b.amountTotal,
+      status: b.status,
+      paymentStatus: b.paymentId ? "HAS_PAYMENT" : "NO_PAYMENT",
+      paymentId: b.paymentId ? String(b.paymentId) : null,
+      createdAt: b.createdAt,
+      eventStartAt: event?.startAt || b.createdAt
+    };
+  });
+
+  return { bookings: bookingsWithDetails, total };
+}
+
+export async function cancelBooking(bookingId: string, adminId: string, adminUsername: string): Promise<void> {
+  await connectMongo();
+
+  const booking = await Booking.findById(bookingId);
+  if (!booking) throw new Error("Booking not found");
+  if ((booking as any).status === "CANCELLED") throw new Error("Booking already cancelled");
+
+  (booking as any).status = "CANCELLED";
+  await booking.save();
+
+  // Update event seats
+  const event = await EventSlot.findById((booking as any).eventSlotId);
+  if (event) {
+    (event as any).seatsRemaining += (booking as any).seats;
+    await event.save();
+  }
+
+  // Log admin action
+  await AdminAction.create({
+    adminUserId: adminId,
+    adminUsername,
+    actionType: "CANCEL_BOOKING",
+    targetType: "BOOKING",
+    targetId: bookingId,
+    description: `Cancelled booking ${bookingId}`
+  });
+}
+
+// ==========================================
+// PAYMENTS & REFUNDS
+// ==========================================
+
+export interface PaymentListItem {
+  _id: string;
+  bookingId: string;
+  eventName: string;
+  guestName: string;
+  guestEmail: string;
+  amount: number;
+  currency: string;
+  status: string;
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  createdAt: Date;
+}
+
+export async function listPayments(filters: {
+  status?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ payments: PaymentListItem[]; total: number }> {
+  await connectMongo();
+
+  const page = filters.page || 1;
+  const limit = filters.limit || 20;
+  const skip = (page - 1) * limit;
+
+  const query: any = {};
+  if (filters.status) query.status = filters.status;
+
+  const total = await Payment.countDocuments(query);
+  const payments = await Payment.find(query)
+    .populate({
+      path: "bookingId",
+      populate: [
+        { path: "eventSlotId", select: "eventName" },
+        { path: "guestUserId", select: "email" }
+      ]
+    })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  const paymentsWithDetails: PaymentListItem[] = payments.map((p: any) => {
+    const booking = p.bookingId as any;
+    const event = booking?.eventSlotId as any;
+    const guestUser = booking?.guestUserId as any;
+
+    return {
+      _id: String(p._id),
+      bookingId: String(p.bookingId),
+      eventName: event?.eventName || "N/A",
+      guestName: booking?.guestName || "N/A",
+      guestEmail: guestUser?.email || "",
+      amount: p.amount,
+      currency: p.currency,
+      status: p.status,
+      razorpayOrderId: p.razorpayOrderId || "",
+      razorpayPaymentId: p.razorpayPaymentId || "",
+      createdAt: p.createdAt
+    };
+  });
+
+  return { payments: paymentsWithDetails, total };
+}
+
+export async function processRefund(
+  paymentId: string,
+  adminId: string,
+  adminUsername: string,
+  reason?: string
+): Promise<void> {
+  await connectMongo();
+
+  const payment = await Payment.findById(paymentId);
+  if (!payment) throw new Error("Payment not found");
+  if ((payment as any).status !== "PAID") throw new Error("Payment must be PAID to refund");
+
+  // Update payment status
+  (payment as any).status = "REFUNDED";
+  await payment.save();
+
+  // Update booking status
+  const booking = await Booking.findById((payment as any).bookingId);
+  if (booking) {
+    (booking as any).status = "REFUND_REQUIRED";
+    await booking.save();
+  }
+
+  // Log admin action
+  await AdminAction.create({
+    adminUserId: adminId,
+    adminUsername,
+    actionType: "PROCESS_REFUND",
+    targetType: "PAYMENT",
+    targetId: paymentId,
+    metadata: { reason },
+    description: `Processed refund for payment ${paymentId}${reason ? `: ${reason}` : ""}`
+  });
+}
+
+// ==========================================
+// REVIEWS & FEEDBACK MODERATION
+// ==========================================
+
+export interface ReviewListItem {
+  _id: string;
+  eventSlotId: string;
+  eventName: string;
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  toUserName: string;
+  feedbackType: string;
+  rating: number;
+  comment: string;
+  eventRating?: number;
+  venueRating?: number;
+  foodRating?: number;
+  hospitalityRating?: number;
+  isHidden: boolean;
+  reportedCount: number;
+  createdAt: Date;
+}
+
+export async function listReviews(filters: {
+  feedbackType?: string;
+  toUserId?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ reviews: ReviewListItem[]; total: number }> {
+  await connectMongo();
+
+  const page = filters.page || 1;
+  const limit = filters.limit || 20;
+  const skip = (page - 1) * limit;
+
+  const query: any = {};
+  if (filters.feedbackType) query.feedbackType = filters.feedbackType;
+  if (filters.toUserId) query.toUserId = filters.toUserId;
+
+  const total = await Feedback.countDocuments(query);
+  const reviews = await Feedback.find(query)
+    .populate("eventSlotId", "eventName")
+    .populate("fromUserId", "email")
+    .populate("toUserId", "email")
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  const userIds = new Set<string>();
+  reviews.forEach((r: any) => {
+    if (r.fromUserId) userIds.add(String(r.fromUserId?._id || r.fromUserId));
+    if (r.toUserId) userIds.add(String(r.toUserId?._id || r.toUserId));
+  });
+
+  const hostProfiles = await HostProfile.find({ userId: { $in: Array.from(userIds) } }).lean();
+  const guestProfiles = await GuestProfile.find({ userId: { $in: Array.from(userIds) } }).lean();
+  const nameMap = new Map();
+  hostProfiles.forEach((hp: any) => {
+    const name = `${hp.firstName || ""} ${hp.lastName || ""}`.trim();
+    if (name) nameMap.set(String(hp.userId), name);
+  });
+  guestProfiles.forEach((gp: any) => {
+    const name = `${gp.firstName || ""} ${gp.lastName || ""}`.trim();
+    if (name) nameMap.set(String(gp.userId), name);
+  });
+
+  const reviewsWithDetails: ReviewListItem[] = reviews.map((r: any) => {
+    const event = r.eventSlotId as any;
+    const fromUser = r.fromUserId as any;
+    const toUser = r.toUserId as any;
+    const fromUserIdStr = String(fromUser?._id || r.fromUserId);
+    const toUserIdStr = String(toUser?._id || r.toUserId);
+
+    return {
+      _id: String(r._id),
+      eventSlotId: event ? String(event._id) : String(r.eventSlotId),
+      eventName: event?.eventName || "N/A",
+      fromUserId: fromUserIdStr,
+      fromUserName: nameMap.get(fromUserIdStr) || fromUser?.email || "N/A",
+      toUserId: toUserIdStr,
+      toUserName: nameMap.get(toUserIdStr) || toUser?.email || "N/A",
+      feedbackType: r.feedbackType,
+      rating: r.rating,
+      comment: r.comment || "",
+      eventRating: r.eventRating,
+      venueRating: r.venueRating,
+      foodRating: r.foodRating,
+      hospitalityRating: r.hospitalityRating,
+      isHidden: r.isHidden || false,
+      reportedCount: r.reportedCount || 0,
+      createdAt: r.createdAt
+    };
+  });
+
+  return { reviews: reviewsWithDetails, total };
+}
+
+export async function hideReview(
+  reviewId: string,
+  adminId: string,
+  adminUsername: string,
+  reason?: string
+): Promise<void> {
+  await connectMongo();
+
+  const review = await Feedback.findById(reviewId);
+  if (!review) throw new Error("Review not found");
+
+  (review as any).isHidden = true;
+  await review.save();
+
+  await AdminAction.create({
+    adminUserId: adminId,
+    adminUsername,
+    actionType: "HIDE_REVIEW",
+    targetType: "REVIEW",
+    targetId: reviewId,
+    metadata: { reason },
+    description: `Hidden review ${reviewId}${reason ? `: ${reason}` : ""}`
+  });
+}
+
+export async function showReview(
+  reviewId: string,
+  adminId: string,
+  adminUsername: string
+): Promise<void> {
+  await connectMongo();
+
+  const review = await Feedback.findById(reviewId);
+  if (!review) throw new Error("Review not found");
+
+  (review as any).isHidden = false;
+  await review.save();
+
+  await AdminAction.create({
+    adminUserId: adminId,
+    adminUsername,
+    actionType: "SHOW_REVIEW",
+    targetType: "REVIEW",
+    targetId: reviewId,
+    description: `Showed review ${reviewId}`
+  });
+}
+
+// ==========================================
+// USER DETAILS (HOST & GUEST)
+// ==========================================
+
+export interface UserDetailData {
+  user: {
+    _id: string;
+    email: string;
+    mobile: string;
+    role: Role;
+    status: AccountStatus;
+    createdAt: Date;
+  };
+  profile: {
+    firstName: string;
+    lastName: string;
+    age: number;
+    bio?: string;
+    interests?: string[];
+    ratingAvg: number;
+    ratingCount: number;
+  } | null;
+  hostProfile?: {
+    hostTier: string;
+    totalEventsHosted: number;
+    totalGuestsServed: number;
+    totalRevenue: number;
+    isIdentityVerified: boolean;
+    isCulinaryCertified: boolean;
+    verificationDate: Date | null;
+  };
+  guestProfile?: {
+    guestType: string;
+    totalBookings: number;
+    totalSpent: number;
+  };
+  bookings: Array<{
+    _id: string;
+    eventName: string;
+    eventDate: Date;
+    seats: number;
+    amountTotal: number;
+    status: string;
+  }>;
+  events?: Array<{
+    _id: string;
+    eventName: string;
+    startAt: Date;
+    maxGuests: number;
+    bookingsCount: number;
+    revenue: number;
+    status: string;
+  }>;
+  reviews: Array<{
+    _id: string;
+    eventName: string;
+    rating: number;
+    comment: string;
+    feedbackType: string;
+    createdAt: Date;
+  }>;
+}
+
+export async function getUserDetail(userId: string): Promise<UserDetailData> {
+  await connectMongo();
+
+  const user = await User.findById(userId).lean();
+  if (!user) throw new Error("User not found");
+
+  const userDoc = user as any;
+
+  // Get profile
+  let hostProfile = null;
+  let guestProfile = null;
+  let profile = null;
+
+  if (userDoc.role === "HOST") {
+    hostProfile = await HostProfile.findOne({ userId }).lean();
+    profile = hostProfile as any;
+  } else if (userDoc.role === "GUEST") {
+    guestProfile = await GuestProfile.findOne({ userId }).lean();
+    profile = guestProfile as any;
+  }
+
+  // Get bookings
+  const bookings = await Booking.find({ guestUserId: userId })
+    .populate("eventSlotId", "eventName startAt")
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+
+  // Get events (if host)
+  let events: any[] = [];
+  if (userDoc.role === "HOST") {
+    events = await EventSlot.find({ hostUserId: userId })
+      .sort({ startAt: -1 })
+      .limit(50)
+      .lean();
+
+    const eventIds = events.map((e: any) => String(e._id));
+    const eventBookings = await Booking.find({
+      eventSlotId: { $in: eventIds },
+      status: "CONFIRMED"
+    }).lean();
+
+    const bookingMap = new Map();
+    eventBookings.forEach((b: any) => {
+      const eventId = String(b.eventSlotId);
+      const existing = bookingMap.get(eventId) || { count: 0, revenue: 0 };
+      bookingMap.set(eventId, {
+        count: existing.count + 1,
+        revenue: existing.revenue + (b.amountTotal || 0)
+      });
+    });
+
+    events = events.map((e: any) => {
+      const bookingInfo = bookingMap.get(String(e._id)) || { count: 0, revenue: 0 };
+      return {
+        _id: String(e._id),
+        eventName: e.eventName,
+        startAt: e.startAt,
+        maxGuests: e.maxGuests,
+        bookingsCount: bookingInfo.count,
+        revenue: bookingInfo.revenue,
+        status: e.status
+      };
+    });
+  }
+
+  // Get reviews
+  const reviews = await Feedback.find({
+    $or: [{ fromUserId: userId }, { toUserId: userId }]
+  })
+    .populate("eventSlotId", "eventName")
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+
+  return {
+    user: {
+      _id: String(userDoc._id),
+      email: userDoc.email,
+      mobile: userDoc.mobile,
+      role: userDoc.role as Role,
+      status: userDoc.status as AccountStatus,
+      createdAt: userDoc.createdAt
+    },
+    profile: profile
+      ? {
+          firstName: (profile as any).firstName || "",
+          lastName: (profile as any).lastName || "",
+          age: (profile as any).age || 0,
+          bio: (profile as any).bio,
+          interests: (profile as any).interests || [],
+          ratingAvg: (profile as any).ratingAvg || 0,
+          ratingCount: (profile as any).ratingCount || 0
+        }
+      : null,
+    hostProfile: hostProfile
+      ? {
+          hostTier: (hostProfile as any).hostTier || "STANDARD",
+          totalEventsHosted: (hostProfile as any).totalEventsHosted || 0,
+          totalGuestsServed: (hostProfile as any).totalGuestsServed || 0,
+          totalRevenue: (hostProfile as any).totalRevenue || 0,
+          isIdentityVerified: (hostProfile as any).isIdentityVerified || false,
+          isCulinaryCertified: (hostProfile as any).isCulinaryCertified || false,
+          verificationDate: (hostProfile as any).verificationDate || null
+        }
+      : undefined,
+    guestProfile: guestProfile
+      ? {
+          guestType: (guestProfile as any).guestType || "BASIC",
+          totalBookings: bookings.length,
+          totalSpent: bookings.reduce((sum, b: any) => sum + ((b.amountTotal || 0) * (b.status === "CONFIRMED" ? 1 : 0)), 0)
+        }
+      : undefined,
+    bookings: bookings.map((b: any) => {
+      const event = b.eventSlotId as any;
+      return {
+        _id: String(b._id),
+        eventName: event?.eventName || "N/A",
+        eventDate: event?.startAt || b.createdAt,
+        seats: b.seats,
+        amountTotal: b.amountTotal,
+        status: b.status
+      };
+    }),
+    events,
+    reviews: reviews.map((r: any) => {
+      const event = r.eventSlotId as any;
+      return {
+        _id: String(r._id),
+        eventName: event?.eventName || "N/A",
+        rating: r.rating,
+        comment: r.comment || "",
+        feedbackType: r.feedbackType,
+        createdAt: r.createdAt
+      };
+    })
+  };
+}
+
+// ==========================================
+// EVENT MODERATION
+// ==========================================
+
+export async function approveEvent(
+  eventId: string,
+  adminId: string,
+  adminUsername: string
+): Promise<void> {
+  await connectMongo();
+
+  const event = await EventSlot.findById(eventId);
+  if (!event) throw new Error("Event not found");
+
+  (event as any).status = "OPEN";
+  await event.save();
+
+  await AdminAction.create({
+    adminUserId: adminId,
+    adminUsername,
+    actionType: "APPROVE_EVENT",
+    targetType: "EVENT",
+    targetId: eventId,
+    description: `Approved event ${eventId}`
+  });
+}
+
+export async function rejectEvent(
+  eventId: string,
+  adminId: string,
+  adminUsername: string,
+  reason?: string
+): Promise<void> {
+  await connectMongo();
+
+  const event = await EventSlot.findById(eventId);
+  if (!event) throw new Error("Event not found");
+
+  (event as any).status = "CANCELLED";
+  await event.save();
+
+  await AdminAction.create({
+    adminUserId: adminId,
+    adminUsername,
+    actionType: "REJECT_EVENT",
+    targetType: "EVENT",
+    targetId: eventId,
+    metadata: { reason },
+    description: `Rejected event ${eventId}${reason ? `: ${reason}` : ""}`
+  });
+}
+
+export async function cancelEventByAdmin(
+  eventId: string,
+  adminId: string,
+  adminUsername: string,
+  reason?: string
+): Promise<void> {
+  await connectMongo();
+
+  const event = await EventSlot.findById(eventId);
+  if (!event) throw new Error("Event not found");
+
+  (event as any).status = "CANCELLED";
+  await event.save();
+
+  // Cancel all bookings and mark for refund
+  await Booking.updateMany(
+    { eventSlotId: eventId, status: { $in: ["PAYMENT_PENDING", "CONFIRMED"] } },
+    { status: "CANCELLED" }
+  );
+
+  await AdminAction.create({
+    adminUserId: adminId,
+    adminUsername,
+    actionType: "CANCEL_EVENT",
+    targetType: "EVENT",
+    targetId: eventId,
+    metadata: { reason },
+    description: `Cancelled event ${eventId}${reason ? `: ${reason}` : ""}`
+  });
+}
+
+// ==========================================
+// VENUES MANAGEMENT
+// ==========================================
+
+export interface VenueListItem {
+  _id: string;
+  name: string;
+  address: string;
+  locality: string;
+  hostUserId: string;
+  hostName: string;
+  hostEmail: string;
+  foodCategories: string[];
+  gamesAvailable: string[];
+  createdAt: Date;
+}
+
+export async function listVenues(filters: {
+  hostUserId?: string;
+  locality?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ venues: VenueListItem[]; total: number }> {
+  await connectMongo();
+
+  const page = filters.page || 1;
+  const limit = filters.limit || 20;
+  const skip = (page - 1) * limit;
+
+  const query: any = {};
+  if (filters.hostUserId) query.hostUserId = filters.hostUserId;
+  if (filters.locality) query.locality = { $regex: filters.locality, $options: "i" };
+
+  const total = await Venue.countDocuments(query);
+  const venues = await Venue.find(query)
+    .populate("hostUserId", "email")
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  const hostUserIds = [...new Set(venues.map((v: any) => String(v.hostUserId?._id || v.hostUserId)))];
+  const hostProfiles = await HostProfile.find({ userId: { $in: hostUserIds } }).lean();
+  const hostNameMap = new Map();
+  hostProfiles.forEach((hp: any) => {
+    const name = `${hp.firstName || ""} ${hp.lastName || ""}`.trim();
+    if (name) hostNameMap.set(String(hp.userId), name);
+  });
+
+  const venuesWithDetails: VenueListItem[] = venues.map((v: any) => {
+    const hostUser = v.hostUserId as any;
+    const hostUserIdStr = String(hostUser?._id || v.hostUserId);
+
+    return {
+      _id: String(v._id),
+      name: v.name,
+      address: v.address,
+      locality: v.locality || "",
+      hostUserId: hostUserIdStr,
+      hostName: hostNameMap.get(hostUserIdStr) || "N/A",
+      hostEmail: hostUser?.email || "",
+      foodCategories: v.foodCategories || [],
+      gamesAvailable: v.gamesAvailable || [],
+      createdAt: v.createdAt
+    };
+  });
+
+  return { venues: venuesWithDetails, total };
+}
+
+// ==========================================
+// PLATFORM SETTINGS
+// ==========================================
+
+export interface PlatformSettings {
+  hostRegistrationFee: number;
+  platformCommissionRate: number;
+  minEventPrice: number;
+  maxEventPrice: number;
+  maxGuestsPerEvent: number;
+  refundPolicy: string;
+  cancellationPolicy: string;
+}
+
+let cachedSettings: PlatformSettings = {
+  hostRegistrationFee: HOST_REGISTRATION_FEE,
+  platformCommissionRate: PLATFORM_COMMISSION_RATE,
+  minEventPrice: 0,
+  maxEventPrice: 10000000, // 100,000 INR
+  maxGuestsPerEvent: 50,
+  refundPolicy: "Full refund if cancelled 48 hours before event",
+  cancellationPolicy: "Hosts can cancel events up to 24 hours before start time"
+};
+
+export async function getPlatformSettings(): Promise<PlatformSettings> {
+  return cachedSettings;
+}
+
+export async function updatePlatformSettings(
+  settings: Partial<PlatformSettings>,
+  adminId: string,
+  adminUsername: string
+): Promise<PlatformSettings> {
+  cachedSettings = { ...cachedSettings, ...settings };
+
+  await AdminAction.create({
+    adminUserId: adminId,
+    adminUsername,
+    actionType: "UPDATE_SETTINGS",
+    targetType: "SETTINGS",
+    metadata: { settings },
+    description: `Updated platform settings`
+  });
+
+  return cachedSettings;
+}
+
+// ==========================================
+// ADMIN USER MANAGEMENT
+// ==========================================
+
+export interface AdminListItem {
+  _id: string;
+  username: string;
+  email: string;
+  fullName: string;
+  role: string;
+  isActive: boolean;
+  lastLoginAt: Date | null;
+  createdAt: Date;
+}
+
+export async function listAdmins(): Promise<AdminListItem[]> {
+  await connectMongo();
+
+  const admins = await Admin.find({})
+    .select("-passwordHash")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return admins.map((a: any) => ({
+    _id: String(a._id),
+    username: a.username,
+    email: a.email,
+    fullName: a.fullName,
+    role: a.role,
+    isActive: a.isActive ?? true,
+    lastLoginAt: a.lastLoginAt || null,
+    createdAt: a.createdAt
+  }));
+}
+
+// ==========================================
+// AUDIT LOGS
+// ==========================================
+
+export interface AuditLogItem {
+  _id: string;
+  adminUserId: string;
+  adminUsername: string;
+  actionType: string;
+  targetType: string;
+  targetId: string | null;
+  description: string;
+  metadata: any;
+  createdAt: Date;
+}
+
+export async function listAuditLogs(filters: {
+  adminUserId?: string;
+  actionType?: string;
+  targetType?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ logs: AuditLogItem[]; total: number }> {
+  await connectMongo();
+
+  const page = filters.page || 1;
+  const limit = filters.limit || 50;
+  const skip = (page - 1) * limit;
+
+  const query: any = {};
+  if (filters.adminUserId) query.adminUserId = filters.adminUserId;
+  if (filters.actionType) query.actionType = filters.actionType;
+  if (filters.targetType) query.targetType = filters.targetType;
+
+  const total = await AdminAction.countDocuments(query);
+  const logs = await AdminAction.find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  return {
+    logs: logs.map((l: any) => ({
+      _id: String(l._id),
+      adminUserId: String(l.adminUserId),
+      adminUsername: l.adminUsername || "Unknown",
+      actionType: l.actionType,
+      targetType: l.targetType || "USER",
+      targetId: l.targetId ? String(l.targetId) : null,
+      description: l.description || "",
+      metadata: l.metadata || {},
+      createdAt: l.createdAt
+    })),
+    total
   };
 }

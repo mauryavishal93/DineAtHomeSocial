@@ -39,10 +39,20 @@ export const ADMIN_PERMISSIONS = {
     canSuspendUsers: true,
     canViewEvents: true,
     canManageEvents: true,
+    canApproveEvents: true,
+    canCancelEvents: true,
     canViewRevenue: true,
     canManageSettings: true,
     canViewAnalytics: true,
-    canManageAdmins: true
+    canManageAdmins: true,
+    canManageBookings: true,
+    canCancelBookings: true,
+    canProcessRefunds: true,
+    canViewPayments: true,
+    canModerateReviews: true,
+    canManageVenues: true,
+    canViewAuditLogs: true,
+    canViewUserDetails: true
   },
   MODERATOR: {
     canViewDashboard: true,
@@ -51,10 +61,20 @@ export const ADMIN_PERMISSIONS = {
     canSuspendUsers: true,
     canViewEvents: true,
     canManageEvents: true,
+    canApproveEvents: true,
+    canCancelEvents: true,
     canViewRevenue: false,
     canManageSettings: false,
     canViewAnalytics: true,
-    canManageAdmins: false
+    canManageAdmins: false,
+    canManageBookings: true,
+    canCancelBookings: true,
+    canProcessRefunds: true,
+    canViewPayments: true,
+    canModerateReviews: true,
+    canManageVenues: true,
+    canViewAuditLogs: true,
+    canViewUserDetails: true
   },
   ANALYST: {
     canViewDashboard: true,
@@ -63,10 +83,20 @@ export const ADMIN_PERMISSIONS = {
     canSuspendUsers: false,
     canViewEvents: true,
     canManageEvents: false,
+    canApproveEvents: false,
+    canCancelEvents: false,
     canViewRevenue: true,
     canManageSettings: false,
     canViewAnalytics: true,
-    canManageAdmins: false
+    canManageAdmins: false,
+    canManageBookings: false,
+    canCancelBookings: false,
+    canProcessRefunds: false,
+    canViewPayments: true,
+    canModerateReviews: false,
+    canManageVenues: false,
+    canViewAuditLogs: true,
+    canViewUserDetails: true
   }
 } as const;
 

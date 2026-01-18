@@ -61,7 +61,7 @@ export async function PATCH(req: Request) {
       return serverError("Missing userId or status");
     }
 
-    await updateUserStatus(userId, status, ctx.adminId);
+    await updateUserStatus(userId, status, ctx.adminId, ctx.username);
     return ok({ success: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
