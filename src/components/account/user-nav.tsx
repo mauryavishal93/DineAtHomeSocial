@@ -31,19 +31,35 @@ export function UserNav() {
       return;
     }
     (async () => {
-      const res = await apiFetch<Me>("/api/me", {
-        method: "GET",
-        headers: { authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) {
-        // Token likely expired or invalid; clear local session.
+      try {
+        const res = await apiFetch<Me>("/api/me", {
+          method: "GET",
+          headers: { authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          // For admin users on admin pages, don't clear session on /api/me failure
+          // as they might be using admin-specific endpoints
+          if (pathname?.startsWith("/admin") && role === "ADMIN") {
+            console.warn("Admin user on admin page - skipping /api/me failure");
+            return;
+          }
+          // Token likely expired or invalid; clear local session.
+          clearSession();
+          setMe(null);
+          return;
+        }
+        setMe(res.data);
+      } catch (error) {
+        console.error("Error fetching /api/me:", error);
+        // Don't clear session on network errors for admin pages
+        if (pathname?.startsWith("/admin") && role === "ADMIN") {
+          return;
+        }
         clearSession();
         setMe(null);
-        return;
       }
-      setMe(res.data);
     })();
-  }, [token, pathname]);
+  }, [token, pathname, role]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
