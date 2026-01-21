@@ -15,13 +15,14 @@ export async function getGuestProfile(userId: string) {
     name: `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim(),
     age: profile.age ?? 0,
     gender: profile.gender ?? "",
+    bio: profile.bio ?? "",
     interests: profile.interests ?? []
   };
 }
 
 export async function upsertGuestProfile(
   userId: string,
-  input: { name: string; age: number; gender: string; interests: string[] }
+  input: { name: string; age: number; gender: string; bio?: string; interests: string[] }
 ) {
   await connectMongo();
   const { firstName, lastName } = splitName(input.name);
@@ -34,6 +35,7 @@ export async function upsertGuestProfile(
         lastName,
         age: input.age,
         gender: input.gender,
+        bio: input.bio ?? "",
         interests: input.interests
       }
     },
@@ -44,6 +46,7 @@ export async function upsertGuestProfile(
     name: `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim(),
     age: profile.age ?? 0,
     gender: profile.gender ?? "",
+    bio: profile.bio ?? "",
     interests: profile.interests ?? []
   };
 }

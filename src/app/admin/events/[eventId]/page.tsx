@@ -338,9 +338,12 @@ export default function AdminEventDetailPage({
               <div className="space-y-3 text-sm">
                 <div>
                   <span className="font-medium text-ink-700">Name:</span>{" "}
-                  <span className="text-ink-900">
+                  <Link
+                    href={`/hosts/${eventDetail.host.userId}`}
+                    className="font-medium text-ink-900 hover:text-ink-600 hover:underline"
+                  >
                     {eventDetail.host.firstName} {eventDetail.host.lastName}
-                  </span>
+                  </Link>
                 </div>
                 <div>
                   <span className="font-medium text-ink-700">Email:</span>{" "}

@@ -57,7 +57,10 @@ export default function AdminLoginPage() {
       }
       
       console.log("Token stored successfully, redirecting...");
-      router.push("/admin");
+      // Small delay to ensure state updates propagate
+      setTimeout(() => {
+        router.push("/admin");
+      }, 100);
     } else {
       setError(res.error || "Invalid credentials");
     }

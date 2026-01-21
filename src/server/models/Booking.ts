@@ -54,12 +54,38 @@ const BookingSchema = new Schema(
       ratedAt: { type: Date, default: () => new Date() }
     }],
     default: []
-  }
+  },
+  
+  // Refund fields
+  refundRequestedAt: { type: Date, default: null },
+  refundReason: { type: String, default: "" },
+  refundAmount: { type: Number, default: 0 },
+  refundPercentage: { type: Number, default: 0 },
+  
+  // Cancellation fields
+  cancelledAt: { type: Date, default: null },
+  cancellationReason: { type: String, default: "" },
+  
+  // Check-in fields
+  checkedInAt: { type: Date, default: null },
+  checkedInBy: { type: Types.ObjectId, ref: "User", default: null }
   },
   { timestamps: true }
 );
 
 BookingSchema.index({ guestUserId: 1, createdAt: -1 });
+
+// Unique index to prevent duplicate active bookings per user per event
+BookingSchema.index(
+  { eventSlotId: 1, guestUserId: 1 },
+  { 
+    unique: true,
+    partialFilterExpression: { 
+      status: { $in: ["PAYMENT_PENDING", "CONFIRMED"] } 
+    },
+    name: "unique_active_booking_per_user_event"
+  }
+);
 
 export type BookingDoc = InferSchemaType<typeof BookingSchema>;
 export const Booking = models.Booking || model("Booking", BookingSchema);

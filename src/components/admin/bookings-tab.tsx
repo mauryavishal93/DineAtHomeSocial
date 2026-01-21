@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
@@ -127,7 +128,12 @@ export function BookingsTab() {
                     <div className="text-xs text-ink-600">{booking.eventSlotId.slice(0, 8)}...</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-sm text-ink-900">{booking.hostName}</div>
+                    <Link
+                      href={`/hosts/${booking.hostUserId}`}
+                      className="text-sm font-medium text-ink-900 hover:text-ink-600 hover:underline"
+                    >
+                      {booking.hostName}
+                    </Link>
                     <div className="text-xs text-ink-600">{booking.hostEmail}</div>
                   </td>
                   <td className="px-4 py-3">

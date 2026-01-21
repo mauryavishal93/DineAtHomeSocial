@@ -9,6 +9,7 @@ const putSchema = z.object({
   name: z.string().min(1).max(80),
   age: z.coerce.number().int().min(0).max(99),
   gender: z.enum(["Male", "Female", "Other"]),
+  bio: z.string().max(1000).optional(),
   interests: z
     .union([z.array(z.string().min(1).max(40)), z.string()])
     .transform((v) => {
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
     const ctx = await requireAuth(req as unknown as { headers: Headers });
     requireRole(ctx, ["GUEST"]);
     const profile = await getGuestProfile(ctx.userId);
-    return ok(profile ?? { name: "", age: 0, gender: "", interests: [] });
+    return ok(profile ?? { name: "", age: 0, gender: "", bio: "", interests: [] });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unauthorized";
     if (msg.toLowerCase().includes("forbidden")) return forbidden();

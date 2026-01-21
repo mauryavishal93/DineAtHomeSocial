@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken } from "@/lib/session";
 
@@ -78,7 +79,12 @@ export function VenuesTab() {
                   <td className="px-4 py-3 text-sm text-ink-700">{venue.address}</td>
                   <td className="px-4 py-3 text-sm text-ink-600">{venue.locality}</td>
                   <td className="px-4 py-3">
-                    <div className="text-sm text-ink-900">{venue.hostName}</div>
+                    <Link
+                      href={`/hosts/${venue.hostUserId}`}
+                      className="text-sm font-medium text-ink-900 hover:text-ink-600 hover:underline"
+                    >
+                      {venue.hostName}
+                    </Link>
                     <div className="text-xs text-ink-600">{venue.hostEmail}</div>
                   </td>
                   <td className="px-4 py-3 text-sm text-ink-700">

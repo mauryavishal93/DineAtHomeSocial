@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { cookies } from "next/headers";
-import { ok, badRequest, serverError } from "@/server/http/response";
+import { ok, badRequest, serverError, tooManyRequests } from "@/server/http/response";
 import { loginUser } from "@/server/services/authService";
+import { loginRateLimit } from "@/server/utils/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,18 @@ export async function POST(req: Request) {
     const json = await req.json().catch(() => null);
     const parsed = schema.safeParse(json);
     if (!parsed.success) return badRequest(parsed.error.message);
+
+    // Rate limiting: Get IP address from request
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded ? forwarded.split(",")[0] : req.headers.get("x-real-ip") || "unknown";
+    const rateLimitKey = `login:${parsed.data.email}:${ip}`;
+    
+    const rateLimitResult = loginRateLimit(rateLimitKey);
+    if (!rateLimitResult.allowed) {
+      return tooManyRequests(
+        `Too many login attempts. Please try again after ${Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000 / 60)} minutes.`
+      );
+    }
 
     const { accessToken, refreshToken, role, status } = await loginUser(parsed.data);
 

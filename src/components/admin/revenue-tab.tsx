@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken } from "@/lib/session";
 
@@ -154,8 +155,17 @@ export function RevenueTab() {
                   <td className="px-4 py-3 text-sm font-medium text-ink-900">
                     {formatCurrency(item.amount)}
                   </td>
-                  <td className="px-4 py-3 text-sm text-ink-700">
-                    {item.hostName || "N/A"}
+                  <td className="px-4 py-3">
+                    {item.hostId && item.hostName ? (
+                      <Link
+                        href={`/hosts/${item.hostId}`}
+                        className="text-sm font-medium text-ink-900 hover:text-ink-600 hover:underline"
+                      >
+                        {item.hostName}
+                      </Link>
+                    ) : (
+                      <span className="text-sm text-ink-700">N/A</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-ink-600 font-mono">
                     {item.hostId ? `${item.hostId.slice(0, 8)}...` : "N/A"}

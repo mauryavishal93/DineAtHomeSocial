@@ -245,7 +245,7 @@ export default function UserDetailPage() {
                     <div className="text-xs text-ink-600">
                       {new Date(booking.eventDate).toLocaleDateString()} | {booking.seats} seats |{" "}
                       {formatCurrency(booking.amountTotal)} |{" "}
-                      <Badge size="sm">{booking.status}</Badge>
+                      <Badge>{booking.status}</Badge>
                     </div>
                   </div>
                 ))}

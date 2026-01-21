@@ -28,3 +28,15 @@ export function serverError(error = "Server error", init?: ResponseInit) {
   return NextResponse.json({ error }, { status: 500, ...init });
 }
 
+export function tooManyRequests(error = "Too many requests", init?: ResponseInit) {
+  return NextResponse.json({ error }, { status: 429, ...init });
+}
+
+// Generic response helper
+export function createResponse<T>(data: T, init?: ResponseInit) {
+  const status = init?.status || 200;
+  if (status >= 400) {
+    return NextResponse.json(data, { status, ...init });
+  }
+  return NextResponse.json({ data }, { status, ...init });
+}

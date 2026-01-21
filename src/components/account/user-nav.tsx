@@ -18,15 +18,37 @@ type Me = {
 export function UserNav() {
   const router = useRouter();
   const pathname = usePathname();
-  const token = getAccessToken();
-  const role = getRole();
-
+  const [mounted, setMounted] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Only access localStorage after component mounts (client-side only)
   useEffect(() => {
-    if (!token) {
+    setMounted(true);
+    setToken(getAccessToken());
+    setRole(getRole());
+  }, []);
+
+  // Listen to session changes (login/logout)
+  useEffect(() => {
+    if (!mounted || typeof window === "undefined") return;
+    
+    const handler = () => {
+      setToken(getAccessToken());
+      setRole(getRole());
+    };
+    
+    window.addEventListener("dah_session_change", handler);
+    return () => {
+      window.removeEventListener("dah_session_change", handler);
+    };
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || !token) {
       setMe(null);
       return;
     }
@@ -59,7 +81,7 @@ export function UserNav() {
         setMe(null);
       }
     })();
-  }, [token, pathname, role]);
+  }, [mounted, token, pathname, role]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -83,13 +105,14 @@ export function UserNav() {
       await apiFetch("/api/auth/logout", { method: "POST" });
       clearSession();
       setIsDropdownOpen(false);
+      // State will update automatically via useSessionChange listener
       router.push("/");
-      router.refresh();
     },
     [router]
   );
 
-  if (!token || !role) {
+  // During SSR or before mount, always show login buttons to avoid hydration mismatch
+  if (!mounted || !token || !role) {
     return (
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" asChild>
@@ -138,23 +161,69 @@ export function UserNav() {
             </Link>
 
             {role === "GUEST" && (
-              <Link
-                href="/bookings"
-                onClick={() => setIsDropdownOpen(false)}
-                className="block px-4 py-2 text-sm text-ink-700 hover:bg-sand-50 transition-colors"
-              >
-                My Bookings
-              </Link>
+              <>
+                <Link
+                  href="/bookings"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="block px-4 py-2 text-sm text-ink-700 hover:bg-sand-50 transition-colors"
+                >
+                  My Bookings
+                </Link>
+                <Link
+                  href="/host"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="block px-4 py-2 text-sm text-ink-700 hover:bg-sand-50 transition-colors"
+                >
+                  Become a Host
+                </Link>
+                <Link
+                  href="/payments"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="block px-4 py-2 text-sm text-ink-700 hover:bg-sand-50 transition-colors"
+                >
+                  Payments
+                </Link>
+                <Link
+                  href="/referrals"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="block px-4 py-2 text-sm text-ink-700 hover:bg-sand-50 transition-colors"
+                >
+                  Referral
+                </Link>
+                <Link
+                  href="/support"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="block px-4 py-2 text-sm text-ink-700 hover:bg-sand-50 transition-colors"
+                >
+                  Help
+                </Link>
+              </>
             )}
 
             {role === "HOST" && (
-              <Link
-                href="/host/my-events"
-                onClick={() => setIsDropdownOpen(false)}
-                className="block px-4 py-2 text-sm text-ink-700 hover:bg-sand-50 transition-colors"
-              >
-                My Events
-              </Link>
+              <>
+                <Link
+                  href="/host/my-events"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="block px-4 py-2 text-sm text-ink-700 hover:bg-sand-50 transition-colors"
+                >
+                  My Events
+                </Link>
+                <Link
+                  href="/referrals"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="block px-4 py-2 text-sm text-ink-700 hover:bg-sand-50 transition-colors"
+                >
+                  Referral
+                </Link>
+                <Link
+                  href="/support"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="block px-4 py-2 text-sm text-ink-700 hover:bg-sand-50 transition-colors"
+                >
+                  Help
+                </Link>
+              </>
             )}
 
             <button

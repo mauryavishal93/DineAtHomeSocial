@@ -7,6 +7,7 @@ import { connectMongo } from "@/server/db/mongoose";
 import { Venue } from "@/server/models/Venue";
 import { HostProfile } from "@/server/models/HostProfile";
 import { serverError, unauthorized, badRequest } from "@/server/http/response";
+import { uploadRateLimit } from "@/server/utils/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,19 @@ export async function POST(req: NextRequest) {
   try {
     const ctx = await requireAuth(req as any);
     requireRole(ctx, ["HOST"]);
+
+    // Rate limiting for uploads
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded ? forwarded.split(",")[0] : req.headers.get("x-real-ip") || "unknown";
+    const rateLimitKey = `upload:${ctx.userId}:${ip}`;
+    
+    const rateLimitResult = uploadRateLimit(rateLimitKey);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: `Too many uploads. Please try again after ${Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000)} seconds.` },
+        { status: 429 }
+      );
+    }
 
     await connectMongo();
 
@@ -44,10 +58,31 @@ export async function POST(req: NextRequest) {
 
     const uploadedImages: Array<{ filePath: string; fileMime: string; fileName: string }> = [];
 
+    // File size limit: 10MB per file
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_FILES = 10; // Maximum 10 files per request
+    const ALLOWED_MIME_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
+
+    if (files.length > MAX_FILES) {
+      return NextResponse.json(
+        { error: `Maximum ${MAX_FILES} files allowed per upload` },
+        { status: 400 }
+      );
+    }
+
     // Upload each file
     for (const file of files) {
-      if (!file.type.startsWith("image/")) {
-        continue; // Skip non-image files
+      // Validate file type
+      if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+        continue; // Skip invalid file types
+      }
+
+      // Validate file size
+      if (file.size > MAX_FILE_SIZE) {
+        return NextResponse.json(
+          { error: `File ${file.name} exceeds maximum size of ${MAX_FILE_SIZE / 1024 / 1024}MB` },
+          { status: 400 }
+        );
       }
 
       const bytes = await file.arrayBuffer();

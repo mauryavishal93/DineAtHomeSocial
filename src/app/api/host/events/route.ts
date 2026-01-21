@@ -54,7 +54,24 @@ export async function POST(req: Request) {
 
     const start = new Date(parsed.data.startAt);
     if (Number.isNaN(start.getTime())) return badRequest("Invalid start date");
+    
+    // Validate start date is in future
+    const now = new Date();
+    if (start <= now) {
+      return badRequest("Event start time must be in the future");
+    }
+    
     const end = new Date(start.getTime() + parsed.data.durationHours * 60 * 60 * 1000);
+    
+    // Validate end date is after start date
+    if (end <= start) {
+      return badRequest("Event end time must be after start time");
+    }
+    
+    // Validate seat count
+    if (parsed.data.maxGuests <= 0) {
+      return badRequest("Event must have at least 1 seat");
+    }
 
     const tags = [
       ...(parsed.data.tags ?? []),

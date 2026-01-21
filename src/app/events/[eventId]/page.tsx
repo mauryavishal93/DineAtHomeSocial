@@ -11,6 +11,12 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
 import { AddGuestModal, type AdditionalGuest } from "@/components/modals/add-guest-modal";
+import { ShareButton } from "@/components/events/share-button";
+import { CheckInButton } from "@/components/check-in/check-in-button";
+import { CheckInInterface } from "@/components/check-in/check-in-interface";
+import { ReminderButton } from "@/components/events/reminder-button";
+import { RefundModal } from "@/components/modals/refund-modal";
+import { EventPass } from "@/components/events/event-pass";
 
 type EventDetail = {
   id: string;
@@ -77,6 +83,10 @@ export default function EventDetailPage({
     status: string;
   } | null>(null);
   
+  // Event pass data
+  const [eventPass, setEventPass] = useState<any>(null);
+  const [loadingPass, setLoadingPass] = useState(false);
+  
   // Additional guests
   const [additionalGuests, setAdditionalGuests] = useState<AdditionalGuest[]>([]);
   const [isAddGuestModalOpen, setIsAddGuestModalOpen] = useState(false);
@@ -90,9 +100,25 @@ export default function EventDetailPage({
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isEventOwner, setIsEventOwner] = useState(false);
+  const [cancelModal, setCancelModal] = useState<{ bookingId: string; amount: number; eventName: string } | null>(null);
+  const [eventBookings, setEventBookings] = useState<Array<{
+    bookingId: string;
+    guestName: string;
+    guestMobile: string;
+    guestAge: number;
+    guestGender: string;
+    seats: number;
+    status: string;
+    additionalGuests: Array<{
+      name: string;
+      age: number;
+      gender: string;
+      mobile: string;
+    }>;
+  }>>([]);
   
-  // Calculate max seats user can book (3 total minus already booked)
-  const maxSeatsAllowed = 3;
+  // Calculate max seats user can book (2 total: 1 guest + 1 additional guest minus already booked)
+  const maxSeatsAllowed = 2;
   const alreadyBookedSeats = existingBooking?.seats || 0;
   const remainingSeatsAllowed = maxSeatsAllowed - alreadyBookedSeats;
 
@@ -127,12 +153,46 @@ export default function EventDetailPage({
 
       if (res.ok && res.data.userId && ev.hostUserId) {
         setCurrentUserId(res.data.userId);
-        setIsEventOwner(res.data.userId === ev.hostUserId && res.data.role === "HOST");
+        // Check if user owns the event (regardless of role - they might be logged in as Guest but own the event)
+        setIsEventOwner(res.data.userId === ev.hostUserId);
       } else {
         setIsEventOwner(false);
       }
     })();
   }, [token, ev]);
+
+  // Fetch bookings if user is event owner (regardless of role - Guest can own events too)
+  useEffect(() => {
+    if (!isEventOwner || !token || !ev) return;
+
+    (async () => {
+      const { eventId } = await params;
+      const res = await apiFetch<{
+        bookings: Array<{
+          bookingId: string;
+          guestName: string;
+          guestMobile: string;
+          guestAge: number;
+          guestGender: string;
+          seats: number;
+          status: string;
+          additionalGuests: Array<{
+            name: string;
+            age: number;
+            gender: string;
+            mobile: string;
+          }>;
+        }>;
+      }>(`/api/events/${eventId}/bookings`, {
+        method: "GET",
+        headers: { authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok && res.data.bookings) {
+        setEventBookings(res.data.bookings);
+      }
+    })();
+  }, [isEventOwner, token, ev, params]);
 
   // Auto-advance slideshow for images (videos handle their own transitions)
   useEffect(() => {
@@ -236,27 +296,51 @@ export default function EventDetailPage({
 
     const { eventId } = await params;
     
-    // If existing booking: Use first additional guest as primary (since all are additional)
-    // Otherwise: Use current user as primary
-    const bookingData = existingBooking && additionalGuests.length > 0
-      ? {
-          eventSlotId: eventId, 
-          seats: bookingSeats,
-          guestName: additionalGuests[0].name,
-          guestMobile: additionalGuests[0].mobile,
-          guestAge: additionalGuests[0].age,
-          guestGender: additionalGuests[0].gender,
-          additionalGuests: additionalGuests.slice(1) // Rest are additional
+    // If existing booking: Use add-guests endpoint
+    if (existingBooking) {
+      const res = await apiFetch<{ bookingId: string; amountTotal: number; additionalAmount: number }>(
+        `/api/bookings/${existingBooking.bookingId}/add-guests`,
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            seats: bookingSeats,
+            additionalGuests
+          })
         }
-      : {
-          eventSlotId: eventId, 
-          seats: bookingSeats,
-          guestName: currentUser.name,
-          guestMobile: currentUser.mobile,
-          guestAge: currentUser.age,
-          guestGender: currentUser.gender,
-          additionalGuests
-        };
+      );
+      
+      setBookingInProgress(false);
+      if (!res.ok) {
+        setBookingError(res.error);
+        return;
+      }
+      
+      setBookingSuccess(`${bookingSeats} guest${bookingSeats > 1 ? 's' : ''} added! Additional amount: ₹${(res.data.additionalAmount / 100).toFixed(0)}. Total booking: ${alreadyBookedSeats + bookingSeats} seats.`);
+      
+      // Refresh booking status
+      const bookingRefresh = await apiFetch<any>(`/api/events/${eventId}/my-booking`, {
+        method: "GET",
+        headers: { authorization: `Bearer ${token}` }
+      });
+      if (bookingRefresh.ok && bookingRefresh.data) {
+        setExistingBooking(bookingRefresh.data);
+        setAdditionalGuests([]);
+        setBookingSeats(1);
+      }
+      return;
+    }
+    
+    // New booking: Use current user as primary
+    const bookingData = {
+      eventSlotId: eventId, 
+      seats: bookingSeats,
+      guestName: currentUser.name,
+      guestMobile: currentUser.mobile,
+      guestAge: currentUser.age,
+      guestGender: currentUser.gender,
+      additionalGuests
+    };
     
     const res = await apiFetch<{ bookingId: string; amountTotal: number }>(
       "/api/guest/bookings",
@@ -272,11 +356,11 @@ export default function EventDetailPage({
       return;
     }
     
-    const successMessage = existingBooking
-      ? `${bookingSeats} guest${bookingSeats > 1 ? 's' : ''} added! Amount: ₹${(res.data.amountTotal / 100).toFixed(0)}. Total booking: ${alreadyBookedSeats + bookingSeats} seats.`
-      : `Booking confirmed! Amount: ₹${(res.data.amountTotal / 100).toFixed(0)}. You can view all your bookings in My Bookings page.`;
+    const successMessage = `Booking confirmed! Amount: ₹${(res.data.amountTotal / 100).toFixed(0)}. You can view all your bookings in My Bookings page.`;
     
     setBookingSuccess(successMessage);
+    setAdditionalGuests([]);
+    setBookingSeats(1);
     
     // Refresh booking status
     const bookingRefresh = await apiFetch<any>(`/api/events/${eventId}/my-booking`, {
@@ -285,6 +369,32 @@ export default function EventDetailPage({
     });
     if (bookingRefresh.ok && bookingRefresh.data) {
       setExistingBooking(bookingRefresh.data);
+      
+      // Fetch event passes for the new booking
+      setLoadingPass(true);
+      const passesRes = await apiFetch<{ passes: Array<{ passId: string }> }>(
+        `/api/bookings/${res.data.bookingId}/passes`,
+        {
+          method: "GET",
+          headers: { authorization: `Bearer ${token}` }
+        }
+      );
+      
+      if (passesRes.ok && passesRes.data.passes.length > 0) {
+        // Fetch the first pass (primary guest)
+        const passRes = await apiFetch<any>(
+          `/api/passes/${passesRes.data.passes[0].passId}`,
+          {
+            method: "GET",
+            headers: { authorization: `Bearer ${token}` }
+          }
+        );
+        
+        if (passRes.ok && passRes.data.pass) {
+          setEventPass(passRes.data.pass);
+        }
+      }
+      setLoadingPass(false);
     }
     
     // Refresh event to see updated seats
@@ -422,10 +532,15 @@ export default function EventDetailPage({
                   <Badge tone="success">Hosted</Badge>
                   <Badge tone="ink">{ev.locality}</Badge>
                 </div>
-                <h1 className="mt-4 font-display text-4xl tracking-tight text-ink-900">
-                  {ev.title}
-                </h1>
-                <p className="mt-2 text-ink-700">{ev.theme}</p>
+                <div className="mt-4 flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <h1 className="font-display text-4xl tracking-tight text-ink-900">
+                      {ev.title}
+                    </h1>
+                    <p className="mt-2 text-ink-700">{ev.theme}</p>
+                  </div>
+                  <ShareButton eventId={ev.id} />
+                </div>
 
                 <div className="mt-5 grid gap-2 text-sm text-ink-700 sm:grid-cols-2">
                   <div>
@@ -723,13 +838,87 @@ export default function EventDetailPage({
             <div className="rounded-3xl border border-sand-200 bg-white/50 p-6 shadow-soft backdrop-blur">
               <div className="font-medium text-ink-900">About the host</div>
               <div className="mt-2 text-sm text-ink-700">
-                <span className="font-medium text-ink-900">{ev.hostName}</span> •{" "}
-                {ev.hostRating.toFixed(1)} rating
+                <Link
+                  href={`/hosts/${ev.hostUserId}`}
+                  className="font-medium text-ink-900 hover:text-ink-600 hover:underline"
+                >
+                  {ev.hostName}
+                </Link>{" "}
+                • {ev.hostRating.toFixed(1)} rating
               </div>
               <p className="mt-3 text-sm text-ink-700">
                 Host bios, house rules, venue photos, and verification details will
                 come from the backend profiles model.
               </p>
+              
+              {/* Check-in and Reminders */}
+              <div className="mt-4 pt-4 border-t border-sand-200 space-y-3">
+                {existingBooking && role === "GUEST" && (
+                  <CheckInButton
+                    eventId={ev.id}
+                    bookingId={existingBooking.bookingId}
+                    onCheckIn={() => {
+                      // Refresh booking status
+                      (async () => {
+                        const { eventId } = await params;
+                        const res = await apiFetch<{
+                          bookingId: string;
+                          seats: number;
+                          guestName: string;
+                          guestMobile: string;
+                          additionalGuests: AdditionalGuest[];
+                          amountTotal: number;
+                          status: string;
+                        }>(`/api/events/${eventId}/my-booking`, {
+                          headers: { authorization: `Bearer ${token}` }
+                        });
+                        if (res.ok && res.data) {
+                          setExistingBooking(res.data);
+                        }
+                      })();
+                    }}
+                  />
+                )}
+                {isEventOwner && role === "HOST" && (
+                  <>
+                    <ReminderButton eventId={ev.id} isHost={true} />
+                    <div className="text-xs text-ink-600">
+                      Send reminders to all confirmed guests
+                    </div>
+                  </>
+                )}
+                {/* Guest Chat Button - Only show if guest has booked, booking is not cancelled, and event hasn't ended */}
+                {role === "GUEST" && existingBooking && 
+                 existingBooking.status !== "CANCELLED" &&
+                 ev.endAt && new Date(ev.endAt) > new Date() && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      asChild
+                    >
+                      <Link href={`/messages/${ev.id}`}>
+                        💬 Chat with Host
+                      </Link>
+                    </Button>
+                    <div className="text-xs text-ink-600">
+                      Chat available until event ends
+                    </div>
+                  </>
+                )}
+                {/* Show message if booking is cancelled */}
+                {role === "GUEST" && existingBooking && existingBooking.status === "CANCELLED" && (
+                  <div className="text-xs text-ink-600">
+                    ⚠️ Chat closed - Your booking has been cancelled
+                  </div>
+                )}
+                {/* Show if event has ended */}
+                {ev.endAt && new Date(ev.endAt) <= new Date() && (
+                  <div className="text-xs text-ink-600">
+                    ⏰ Event has ended - Chat is now closed
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="rounded-3xl border border-sand-200 bg-white/50 p-6 shadow-soft backdrop-blur">
@@ -738,8 +927,10 @@ export default function EventDetailPage({
                 Guest → Host feedback will appear here after events complete.
               </p>
             </div>
+
           </div>
 
+          <div className="space-y-6">
           <aside className="h-fit rounded-3xl border border-sand-200 bg-white/70 p-6 shadow-card backdrop-blur">
             <div className="text-sm font-medium text-ink-700">From</div>
             <div className="mt-1 font-display text-3xl text-ink-900">
@@ -763,8 +954,10 @@ export default function EventDetailPage({
               </div>
             ) : null}
 
-            {token && role === "GUEST" && currentUser ? (
+            {/* Priority 1: Show booking form if Guest is logged in and doesn't own the event */}
+            {token && role === "GUEST" && currentUser && !isEventOwner ? (
               <>
+                {/* Priority 2: Show booking form if Guest is logged in and doesn't own the event */}
                 {/* Existing Booking (if any) */}
                 {existingBooking && (
                   <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50/50 p-4">
@@ -792,22 +985,80 @@ export default function EventDetailPage({
                     </div>
                     {remainingSeatsAllowed > 0 && (
                       <div className="mt-3 text-xs text-amber-700 bg-amber-100/50 rounded-lg p-2">
-                        💡 You can book {remainingSeatsAllowed} more seat{remainingSeatsAllowed > 1 ? 's' : ''} for this event (3 seats max per person)
+                        💡 You can book {remainingSeatsAllowed} more seat{remainingSeatsAllowed > 1 ? 's' : ''} for this event (2 seats max per person)
                       </div>
                     )}
                     {remainingSeatsAllowed === 0 && (
                       <div className="mt-3 text-xs text-amber-700 bg-amber-100/50 rounded-lg p-2">
-                        🔒 You've reached the maximum limit of 3 seats for this event
+                        🔒 You've reached the maximum limit of 2 seats for this event
+                      </div>
+                    )}
+                    {/* Event Pass Button - Show for CONFIRMED and PAYMENT_PENDING bookings */}
+                    {role === "GUEST" && existingBooking && 
+                     (existingBooking.status === "CONFIRMED" || existingBooking.status === "PAYMENT_PENDING") && (
+                      <div className="mt-4 pt-4 border-t border-amber-300 space-y-2">
+                        <Button
+                          size="sm"
+                          className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white"
+                          onClick={async () => {
+                            if (!token) return;
+                            setLoadingPass(true);
+                            const passesRes = await apiFetch<{ passes: Array<{ passId: string }> }>(
+                              `/api/bookings/${existingBooking.bookingId}/passes`,
+                              {
+                                method: "GET",
+                                headers: { authorization: `Bearer ${token}` }
+                              }
+                            );
+                            
+                            if (passesRes.ok && passesRes.data.passes.length > 0) {
+                              const passRes = await apiFetch<any>(
+                                `/api/passes/${passesRes.data.passes[0].passId}`,
+                                {
+                                  method: "GET",
+                                  headers: { authorization: `Bearer ${token}` }
+                                }
+                              );
+                              
+                              if (passRes.ok && passRes.data.pass) {
+                                setEventPass(passRes.data.pass);
+                              }
+                            }
+                            setLoadingPass(false);
+                          }}
+                          disabled={loadingPass}
+                        >
+                          {loadingPass ? "Loading..." : "🎫 View Event Pass"}
+                        </Button>
+                        {ev.startAt && new Date(ev.startAt) > new Date() && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full text-orange-600 border-orange-300 hover:bg-orange-50"
+                              onClick={() => setCancelModal({
+                                bookingId: existingBooking.bookingId,
+                                amount: existingBooking.amountTotal,
+                                eventName: ev.title
+                              })}
+                            >
+                              ❌ Cancel Booking
+                            </Button>
+                            <p className="text-xs text-ink-600 text-center">
+                              Cancellation policy: 24+ hours = Full refund • Less than 24h = No refund
+                            </p>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Show current user info */}
-                {remainingSeatsAllowed > 0 && (
+                {/* Show current user info - Only show if NO existing booking */}
+                {remainingSeatsAllowed > 0 && !existingBooking && (
                   <div className="mt-5 rounded-2xl border border-sand-200 bg-sand-50/50 p-4">
                     <div className="text-sm font-medium text-ink-900 mb-2">
-                      {existingBooking ? 'Book additional seats as:' : 'Booking as:'}
+                      Booking as:
                     </div>
                     <div className="text-sm text-ink-700">
                       <p className="font-medium text-ink-900">{currentUser.name}</p>
@@ -850,7 +1101,7 @@ export default function EventDetailPage({
                     <p className="mt-1 text-xs text-ink-600">
                       {existingBooking 
                         ? `Add up to ${remainingSeatsAllowed} more guest${remainingSeatsAllowed > 1 ? 's' : ''} to your booking`
-                        : 'Maximum 3 seats per booking (yourself + 2 guests)'
+                        : 'Maximum 2 seats per booking (yourself + 1 guest)'
                       }
                     </p>
                   </div>
@@ -1057,35 +1308,119 @@ export default function EventDetailPage({
                       Maximum Seats Booked
                     </Button>
                     <div className="text-center text-xs text-ink-600">
-                      You've reached the 3-seat limit for this event
+                      You've reached the 2-seat limit for this event
                     </div>
                   </div>
                 )}
               </>
             ) : (
               <>
-                <div className="mt-5 space-y-2 text-sm text-ink-700">
-                  <div className="flex items-center justify-between">
-                    <span>Seats</span>
-                    <span className="font-medium text-ink-900">1</span>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-sand-200 pt-3">
-                    <span>Total</span>
-                    <span className="font-medium text-ink-900">₹{ev.priceFrom}</span>
-                  </div>
-                </div>
+                {/* Priority 3: Show "Login as Guest to Book" for non-logged-in users or non-Guest users */}
+                {/* Only show if user is NOT the event owner (to prevent showing for Guest owners) */}
+                {!isEventOwner && (
+                  <>
+                    <div className="mt-5 space-y-2 text-sm text-ink-700">
+                      <div className="flex items-center justify-between">
+                        <span>Seats</span>
+                        <span className="font-medium text-ink-900">1</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-sand-200 pt-3">
+                        <span>Total</span>
+                        <span className="font-medium text-ink-900">₹{ev.priceFrom}</span>
+                      </div>
+                    </div>
 
-                <div className="mt-6 space-y-3">
-                  <Button size="lg" variant="outline" className="w-full" asChild>
-                    <Link href="/auth/login">Login to book</Link>
-                  </Button>
-                  <div className="text-xs text-ink-600">
-                    Payments handled via Razorpay (order + webhook verification).
-                  </div>
-                </div>
+                    <div className="mt-6 space-y-3">
+                      <Button size="lg" variant="outline" className="w-full" asChild>
+                        <Link href="/auth/login">Login as Guest to Book</Link>
+                      </Button>
+                      <div className="text-xs text-ink-600">
+                        Payments handled via Razorpay (order + webhook verification).
+                      </div>
+                    </div>
+                  </>
+                )}
               </>
             )}
           </aside>
+
+          {/* Event Owner View: Check-in Interface for Hosts */}
+          {isEventOwner && role === "HOST" && (
+            <aside className="mt-6 h-fit rounded-3xl border border-violet-200 bg-gradient-to-br from-violet-50/50 to-pink-50/50 p-6 shadow-soft backdrop-blur">
+              <div className="font-medium text-ink-900 mb-4">Check-In Guests</div>
+              <CheckInInterface eventId={ev.id} />
+            </aside>
+          )}
+
+          {/* Event Owner View: Show bookings list as separate section in right sidebar (for both HOST and GUEST roles if they own the event) */}
+          {isEventOwner && (
+            <aside className="mt-6 h-fit rounded-3xl border border-violet-200 bg-gradient-to-br from-violet-50/50 to-pink-50/50 p-6 shadow-soft backdrop-blur">
+              <div className="font-medium text-ink-900 mb-4">
+                {role === "GUEST" ? "Guests Booked for Your Event" : "Event Bookings"} ({eventBookings.length})
+              </div>
+              {/* Show seats remaining */}
+              <div className="mb-4 p-3 rounded-xl bg-white/80 border border-sand-200">
+                <div className="text-sm font-medium text-ink-900 mb-1">
+                  Seats Available: <span className="text-violet-600">{ev.seatsLeft}</span>
+                </div>
+                <div className="text-xs text-ink-600">
+                  Total Seats: {ev.seatsLeft + eventBookings.reduce((sum, b) => sum + b.seats, 0)}
+                </div>
+              </div>
+              {eventBookings.length > 0 ? (
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {eventBookings.map((booking, idx) => (
+                  <div key={booking.bookingId} className="rounded-2xl border border-sand-200 bg-white/80 p-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="font-medium text-ink-900">
+                          Booking #{idx + 1}
+                        </div>
+                        <Badge tone={booking.status === "CONFIRMED" ? "success" : "warning"} className="mt-1">
+                          {booking.status}
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-ink-600">
+                        {booking.seats} seat{booking.seats > 1 ? 's' : ''}
+                      </div>
+                    </div>
+                    
+                    {/* Primary Guest */}
+                    <div className="text-sm">
+                      <div className="font-medium text-ink-900 mb-1">Primary Guest:</div>
+                      <div className="pl-3 text-ink-700 space-y-1">
+                        <div>👤 {booking.guestName}</div>
+                        <div>📱 {booking.guestMobile}</div>
+                        <div>🎂 {booking.guestAge} years • {booking.guestGender}</div>
+                      </div>
+                    </div>
+
+                    {/* Additional Guests */}
+                    {booking.additionalGuests && booking.additionalGuests.length > 0 && (
+                      <div className="mt-3 text-sm">
+                        <div className="font-medium text-ink-900 mb-1">
+                          Additional Guest{booking.additionalGuests.length > 1 ? 's' : ''}:
+                        </div>
+                        {booking.additionalGuests.map((guest, gIdx) => (
+                          <div key={gIdx} className="pl-3 text-ink-700 space-y-1 mt-2 pt-2 border-t border-sand-100">
+                            <div>👤 {guest.name}</div>
+                            <div>📱 {guest.mobile}</div>
+                            <div>🎂 {guest.age} years • {guest.gender}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              ) : (
+                <div className="text-sm text-ink-600 text-center py-4">
+                  No bookings yet. Waiting for guests to book seats.
+                </div>
+              )}
+            </aside>
+          )}
+          </div>
         </div>
       </Container>
 
@@ -1100,6 +1435,75 @@ export default function EventDetailPage({
           setAdditionalGuests(newGuests);
         }}
       />
+
+      {eventPass && (
+        <EventPass
+          pass={eventPass}
+          onClose={() => setEventPass(null)}
+        />
+      )}
+
+      {cancelModal && (
+        <RefundModal
+          isOpen={!!cancelModal}
+          onClose={() => {
+            setCancelModal(null);
+            // Refresh booking status and event details
+            (async () => {
+              const { eventId } = await params;
+              
+              // Refresh booking status
+              const bookingRes = await apiFetch<{
+                bookingId: string;
+                seats: number;
+                guestName: string;
+                guestMobile: string;
+                additionalGuests: AdditionalGuest[];
+                amountTotal: number;
+                status: string;
+              }>(`/api/events/${eventId}/my-booking`, {
+                headers: { authorization: `Bearer ${token}` }
+              });
+              
+              if (bookingRes.ok && bookingRes.data) {
+                setExistingBooking(bookingRes.data);
+              } else {
+                // Booking was cancelled, clear it
+                setExistingBooking(null);
+              }
+              
+              // Refresh event details to update seat availability
+              const eventRes = await apiFetch<EventDetail>(`/api/events/${eventId}`, {
+                method: "GET"
+              });
+              if (eventRes.ok && eventRes.data) {
+                setEv(eventRes.data);
+              }
+            })();
+          }}
+          bookingId={cancelModal.bookingId}
+          amount={cancelModal.amount}
+          eventName={cancelModal.eventName}
+          onSuccess={() => {
+            // Refresh everything after successful cancellation
+            (async () => {
+              const { eventId } = await params;
+              
+              // Clear booking
+              setExistingBooking(null);
+              setCancelModal(null);
+              
+              // Refresh event details to show updated seat availability
+              const eventRes = await apiFetch<EventDetail>(`/api/events/${eventId}`, {
+                method: "GET"
+              });
+              if (eventRes.ok && eventRes.data) {
+                setEv(eventRes.data);
+              }
+            })();
+          }}
+        />
+      )}
     </main>
   );
 }

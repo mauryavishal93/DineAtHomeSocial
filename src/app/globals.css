@@ -15,10 +15,14 @@ body {
 body {
   color: rgb(var(--fg));
   background:
-    radial-gradient(1000px 700px at 10% 0%, rgba(219, 199, 173, 0.45), transparent 55%),
-    radial-gradient(800px 600px at 80% 10%, rgba(183, 138, 89, 0.20), transparent 50%),
+    radial-gradient(1200px 800px at 0% 0%, rgba(251, 146, 60, 0.15), transparent 50%),
+    radial-gradient(1000px 700px at 100% 0%, rgba(139, 92, 246, 0.12), transparent 50%),
+    radial-gradient(900px 600px at 50% 100%, rgba(59, 130, 246, 0.10), transparent 50%),
+    radial-gradient(800px 500px at 20% 50%, rgba(236, 72, 153, 0.08), transparent 50%),
+    linear-gradient(135deg, rgba(251, 250, 248, 0.95) 0%, rgba(255, 255, 255, 1) 100%),
     rgb(var(--bg));
   font-family: theme(fontFamily.sans);
+  background-attachment: fixed;
 }
 
 .text-balance {

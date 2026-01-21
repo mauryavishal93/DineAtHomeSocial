@@ -46,7 +46,10 @@ export function LoginForm() {
         }
         setSession({ accessToken: res.data.accessToken, role: res.data.role });
         setServerOk("Logged in. Redirecting to home…");
-        router.push("/");
+        // Small delay to ensure state updates propagate
+        setTimeout(() => {
+          router.push("/");
+        }, 100);
       }),
     [handleSubmit, router]
   );

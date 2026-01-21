@@ -45,6 +45,14 @@ const FeedbackSchema = new Schema(
     // Photo reviews
     photos: { type: [String], default: [] },
     
+    // Host response to review
+    hostResponse: { type: String, default: "" },
+    hostResponseAt: { type: Date, default: null },
+    
+    // Review helpfulness
+    helpfulCount: { type: Number, default: 0 },
+    helpfulUsers: { type: [Types.ObjectId], ref: "User", default: [] },
+    
     // Verification
     isVerifiedAttendance: { type: Boolean, default: false },
     helpfulCount: { type: Number, default: 0 },

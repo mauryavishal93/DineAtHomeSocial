@@ -9,18 +9,20 @@ export function Input({
   error?: string;
 }) {
   return (
-    <label className="block space-y-1">
-      <div className="text-sm font-medium text-gray-800">{label}</div>
+    <label className="block space-y-1.5">
+      <div className="text-sm font-semibold text-ink-800">{label}</div>
       <input
         {...props}
         className={clsx(
-          "w-full rounded-lg border px-3 py-2 text-sm outline-none transition",
-          "focus:border-gray-400 focus:ring-2 focus:ring-gray-900/15",
-          error ? "border-red-300" : "border-gray-200",
+          "w-full rounded-xl border-2 px-4 py-2.5 text-sm outline-none transition-all duration-200",
+          "bg-white/80 backdrop-blur-sm",
+          "focus:border-violet-400 focus:ring-2 focus:ring-violet-200/50 focus:bg-white",
+          "hover:border-violet-300",
+          error ? "border-red-400 focus:border-red-500 focus:ring-red-200/50" : "border-violet-200",
           props.className
         )}
       />
-      {error ? <div className="text-xs text-red-600">{error}</div> : null}
+      {error ? <div className="text-xs font-medium text-red-600">{error}</div> : null}
     </label>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
@@ -142,7 +143,14 @@ export function EventsTab() {
                     </a>
                   </td>
                   <td className="px-4 py-3 text-sm text-ink-600 font-mono">{event._id.slice(0, 8)}...</td>
-                  <td className="px-4 py-3 text-sm text-ink-900">{event.hostName || "N/A"}</td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/hosts/${event.hostUserId}`}
+                      className="text-sm font-medium text-ink-900 hover:text-ink-600 hover:underline"
+                    >
+                      {event.hostName || "N/A"}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-sm text-ink-700">{event.hostEmail || "N/A"}</td>
                   <td className="px-4 py-3 text-sm text-ink-600">
                     {new Date(event.startAt).toLocaleDateString()}
