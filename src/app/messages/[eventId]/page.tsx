@@ -99,7 +99,7 @@ export default function ChatPage({
         setEventName(res.data.eventName);
       }
       setLoading(false);
-    } else if (res.error?.includes("cancelled")) {
+    } else if (!res.ok && res.error?.includes("cancelled")) {
       setChatClosedReason("Your booking for this event has been cancelled.");
       setIsEventEnded(true);
       setLoading(false);
@@ -128,7 +128,7 @@ export default function ChatPage({
     if (res.ok && res.data) {
       setMessages([...messages, res.data.message]);
       setNewMessage("");
-    } else if (res.error?.includes("Chat is closed")) {
+    } else if (!res.ok && res.error?.includes("Chat is closed")) {
       setIsEventEnded(true);
     }
     setSending(false);

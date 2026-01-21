@@ -55,7 +55,6 @@ const FeedbackSchema = new Schema(
     
     // Verification
     isVerifiedAttendance: { type: Boolean, default: false },
-    helpfulCount: { type: Number, default: 0 },
     reportedCount: { type: Number, default: 0 },
     isHidden: { type: Boolean, default: false }
   },

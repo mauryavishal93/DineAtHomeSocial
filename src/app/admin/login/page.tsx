@@ -61,7 +61,7 @@ export default function AdminLoginPage() {
       setTimeout(() => {
         router.push("/admin");
       }, 100);
-    } else {
+    } else if (!res.ok) {
       setError(res.error || "Invalid credentials");
     }
     setLoading(false);

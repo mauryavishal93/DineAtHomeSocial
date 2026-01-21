@@ -78,9 +78,9 @@ export function RevenueTab() {
     const res = await apiFetch<RevenueData>(`/api/admin/revenue?days=${days}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (res.ok) {
+    if (res.ok && res.data) {
       setRevenueData(res.data);
-    } else {
+    } else if (!res.ok) {
       console.error("Failed to load revenue:", res.error);
     }
     setLoading(false);

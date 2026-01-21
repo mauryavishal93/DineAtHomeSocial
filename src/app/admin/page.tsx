@@ -135,7 +135,7 @@ export default function AdminPage() {
         role: res.data.role,
         fullName: res.data.fullName
       });
-    } else {
+    } else if (!res.ok) {
       console.error("Auth check failed:", res.error);
       // Clear invalid token
       if (typeof window !== "undefined") {
@@ -161,9 +161,9 @@ export default function AdminPage() {
         Authorization: `Bearer ${token}`
       }
     });
-    if (res.ok) {
+    if (res.ok && res.data) {
       setAnalytics(res.data);
-    } else {
+    } else if (!res.ok) {
       console.error("Failed to load analytics:", res.error);
       // If unauthorized, redirect to login
       if (res.error?.toLowerCase().includes("unauthorized") || res.error?.toLowerCase().includes("invalid")) {

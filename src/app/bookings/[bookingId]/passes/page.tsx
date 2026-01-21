@@ -72,9 +72,9 @@ export default function EventPassesPage({
         headers: { authorization: `Bearer ${token}` }
       }
     );
-    if (res.ok) {
+    if (res.ok && res.data) {
       setSelectedPass(res.data.pass);
-    } else {
+    } else if (!res.ok) {
       alert(res.error || "Failed to load event pass");
     }
   };

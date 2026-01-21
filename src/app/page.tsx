@@ -14,9 +14,9 @@ export default function HomePage() {
   const [stateFilter, setStateFilter] = useState("");
   
   const filters = {
-    city: cityFilter || undefined,
-    locality: localityFilter || undefined,
-    state: stateFilter || undefined
+    cities: cityFilter ? [cityFilter] : undefined,
+    localities: localityFilter ? [localityFilter] : undefined,
+    states: stateFilter ? [stateFilter] : undefined
   };
   return (
     <main>

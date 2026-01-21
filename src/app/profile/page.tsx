@@ -225,6 +225,10 @@ export default function ProfilePage() {
           venueName: string;
           venueAddress: string;
           locality?: string;
+          city?: string;
+          state?: string;
+          country?: string;
+          postalCode?: string;
           cuisines: string[];
           activities: string[];
           latitude?: number | null;
@@ -776,21 +780,39 @@ export default function ProfilePage() {
                 <div>
                   <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Cuisines</div>
                   <div className="mt-1 flex flex-wrap gap-2">
-                    {hostForm.watch("cuisines")
-                      ? hostForm.watch("cuisines").split(", ").filter(Boolean).map((c, i) => (
-                          <Badge key={i}>{c}</Badge>
-                        ))
-                      : "Not set"}
+                    {(() => {
+                      const cuisines = hostForm.watch("cuisines");
+                      if (!cuisines) return "Not set";
+                      const cuisineArray = Array.isArray(cuisines) 
+                        ? cuisines 
+                        : typeof cuisines === "string" 
+                          ? cuisines.split(", ").filter(Boolean)
+                          : [];
+                      return cuisineArray.length > 0
+                        ? cuisineArray.map((c, i) => (
+                            <Badge key={i}>{c}</Badge>
+                          ))
+                        : "Not set";
+                    })()}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Activities</div>
                   <div className="mt-1 flex flex-wrap gap-2">
-                    {hostForm.watch("activities")
-                      ? hostForm.watch("activities").split(", ").filter(Boolean).map((a, i) => (
-                          <Badge key={i}>{a}</Badge>
-                        ))
-                      : "Not set"}
+                    {(() => {
+                      const activities = hostForm.watch("activities");
+                      if (!activities) return "Not set";
+                      const activityArray = Array.isArray(activities)
+                        ? activities
+                        : typeof activities === "string"
+                          ? activities.split(", ").filter(Boolean)
+                          : [];
+                      return activityArray.length > 0
+                        ? activityArray.map((a, i) => (
+                            <Badge key={i}>{a}</Badge>
+                          ))
+                        : "Not set";
+                    })()}
                   </div>
                 </div>
               </div>

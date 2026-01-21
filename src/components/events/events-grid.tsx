@@ -78,6 +78,7 @@ export function EventsGrid({ filters }: EventsGridProps = {}) {
             city: e.city ?? "",
             venueName: e.venueName ?? "",
             hostName: e.hostName ?? "Host",
+            hostUserId: e.hostUserId ?? "",
             hostRating: e.hostRating ?? 0,
             verified: Boolean(e.verified),
             foodTags: e.foodTags ?? [],

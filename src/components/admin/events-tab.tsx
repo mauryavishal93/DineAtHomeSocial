@@ -35,9 +35,9 @@ export function EventsTab() {
         headers: { Authorization: `Bearer ${token}` }
       }
     );
-    if (res.ok) {
+    if (res.ok && res.data) {
       setEvents(res.data.events);
-    } else {
+    } else if (!res.ok) {
       console.error("Failed to load events:", res.error);
     }
     setLoading(false);
@@ -53,7 +53,7 @@ export function EventsTab() {
     });
     if (res.ok) {
       loadEvents();
-    } else {
+    } else if (!res.ok) {
       alert(`Failed to approve event: ${res.error}`);
     }
   }
@@ -72,7 +72,7 @@ export function EventsTab() {
     });
     if (res.ok) {
       loadEvents();
-    } else {
+    } else if (!res.ok) {
       alert(`Failed to reject event: ${res.error}`);
     }
   }
@@ -93,7 +93,7 @@ export function EventsTab() {
     });
     if (res.ok) {
       loadEvents();
-    } else {
+    } else if (!res.ok) {
       alert(`Failed to cancel event: ${res.error}`);
     }
   }

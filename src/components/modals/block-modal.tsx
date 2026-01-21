@@ -47,7 +47,7 @@ export function BlockModal({
     if (res.ok) {
       onBlockChange?.();
       onClose();
-    } else {
+    } else if (!res.ok) {
       alert(res.error || "Failed to block user");
     }
   };
@@ -73,7 +73,7 @@ export function BlockModal({
     if (res.ok) {
       onBlockChange?.();
       onClose();
-    } else {
+    } else if (!res.ok) {
       alert(res.error || "Failed to unblock user");
     }
   };

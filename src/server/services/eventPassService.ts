@@ -118,7 +118,7 @@ export async function getEventPassById(passId: string) {
   const passDoc = pass as any;
   
   // Get host profile and venue details
-  const hostProfile = await HostProfile.findOne({ userId: passDoc.hostUserId }).lean();
+  const hostProfileDoc = await HostProfile.findOne({ userId: passDoc.hostUserId }).lean();
   const eventSlot = await EventSlot.findById(passDoc.eventSlotId).lean();
   
   if (!eventSlot) {
@@ -126,8 +126,17 @@ export async function getEventPassById(passId: string) {
   }
   
   const eventDoc = eventSlot as any;
-  const venue = await Venue.findById(eventDoc.venueId).lean();
-  const hostUser = await User.findById(passDoc.hostUserId).select("email").lean();
+  const venueDoc = await Venue.findById(eventDoc.venueId).lean();
+  const hostUser = await User.findById(passDoc.hostUserId).select("email mobile").lean();
+  const hostProfile = hostProfileDoc as any;
+  const venue = venueDoc as any;
+  
+  // Get host name from HostProfile firstName and lastName
+  const hostName = (hostProfile && hostProfile.firstName && hostProfile.lastName) 
+    ? `${hostProfile.firstName} ${hostProfile.lastName}`.trim()
+    : (hostProfile && hostProfile.firstName)
+    ? hostProfile.firstName
+    : "Host";
   
   return {
     passId: String(passDoc._id),
@@ -148,9 +157,9 @@ export async function getEventPassById(passId: string) {
     },
     host: {
       hostId: String(passDoc.hostUserId),
-      hostName: hostProfile?.hostName || "Host",
+      hostName: hostName,
       email: (hostUser as any)?.email || "",
-      mobile: hostProfile?.mobile || "",
+      mobile: (hostUser as any)?.mobile || "",
       address: venue?.address || "",
       locality: venue?.locality || "",
       city: venue?.city || "",

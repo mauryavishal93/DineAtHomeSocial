@@ -119,7 +119,7 @@ export default function ReferralsPage() {
       alert("Referral code applied successfully! You'll get rewards after your first booking/event.");
       setUseCode("");
       loadReferrals();
-    } else {
+    } else if (!res.ok) {
       alert(res.error || "Failed to use referral code");
     }
   };
@@ -210,6 +210,7 @@ export default function ReferralsPage() {
           </p>
           <div className="flex gap-3">
             <Input
+              label="Referral Code"
               placeholder="Enter referral code"
               value={useCode}
               onChange={(e) => setUseCode(e.target.value.toUpperCase())}

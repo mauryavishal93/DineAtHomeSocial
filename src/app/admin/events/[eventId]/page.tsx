@@ -158,9 +158,9 @@ export default function AdminEventDetailPage({
       headers: { Authorization: `Bearer ${token}` }
     });
 
-    if (res.ok) {
+    if (res.ok && res.data) {
       setEventDetail(res.data);
-    } else {
+    } else if (!res.ok) {
       setError(res.error || "Failed to load event details");
     }
     setLoading(false);

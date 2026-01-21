@@ -38,9 +38,9 @@ export default function UserDetailPage() {
       headers: { Authorization: `Bearer ${token}` }
     });
 
-    if (res.ok) {
+    if (res.ok && res.data) {
       setUserDetail(res.data);
-    } else {
+    } else if (!res.ok) {
       console.error("Failed to load user details:", res.error);
     }
     setLoading(false);

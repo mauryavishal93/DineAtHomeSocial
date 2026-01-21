@@ -198,7 +198,7 @@ export default function HostMyEventsPage() {
         setUpcoming(refreshRes.data.upcoming);
         setPast(refreshRes.data.past);
       }
-    } else {
+    } else if (!res.ok) {
       alert(res.error || "Failed to submit rating");
     }
   };
