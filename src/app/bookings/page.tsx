@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
+import { RefundModal } from "@/components/modals/refund-modal";
 
 type BookingItem = {
   bookingId: string;
@@ -36,6 +37,7 @@ export default function GuestBookingsPage() {
   const [past, setPast] = useState<BookingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refundModal, setRefundModal] = useState<{ bookingId: string; amount: number; eventName: string } | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -112,7 +114,79 @@ export default function GuestBookingsPage() {
           </Button>
         </div>
 
-        {past.length === 0 ? (
+        {upcoming.length > 0 && (
+          <div className="mb-12">
+            <h2 className="mb-6 font-display text-2xl tracking-tight text-ink-900">
+              Upcoming Events ({upcoming.length})
+            </h2>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {upcoming.map((booking) => (
+                <div
+                  key={booking.bookingId}
+                  className="overflow-hidden rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/30 to-violet-50/30 shadow-lg backdrop-blur"
+                >
+                  <div className="h-24 bg-gradient-to-br from-violet-100 via-pink-100 to-orange-100" />
+                  <div className="p-5">
+                    <div className="mb-2">
+                      <h3 className="font-display text-lg text-ink-900">{booking.eventName}</h3>
+                      {getStatusBadge(booking.bookingStatus)}
+                    </div>
+
+                    <div className="space-y-2 text-sm text-ink-700">
+                      <div>
+                        <div className="text-xs text-ink-600">Date</div>
+                        <div>{booking.eventDate}</div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs text-ink-600">Venue</div>
+                        <div>{booking.venueName}</div>
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-violet-200 pt-2">
+                        <div>
+                          <div className="text-xs text-ink-600">Guests</div>
+                          <div className="font-medium">{booking.seats}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-ink-600">Paid</div>
+                          <div className="font-medium">{formatCurrency(booking.amountPaid)}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      <Button size="sm" variant="outline" className="w-full" asChild>
+                        <Link href={`/events/${booking.eventSlotId}`}>View Event</Link>
+                      </Button>
+                      {(booking.bookingStatus === "CONFIRMED" || booking.bookingStatus === "PAYMENT_PENDING") && (
+                        <Button size="sm" className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white" asChild>
+                          <Link href={`/bookings/${booking.bookingId}/passes`}>🎫 View Event Pass</Link>
+                        </Button>
+                      )}
+                      {booking.bookingStatus === "CONFIRMED" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full text-orange-600 border-orange-300 hover:bg-orange-50"
+                          onClick={() => setRefundModal({
+                            bookingId: booking.bookingId,
+                            amount: booking.amountPaid,
+                            eventName: booking.eventName
+                          })}
+                        >
+                          ❌ Cancel Booking
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {past.length === 0 && upcoming.length === 0 ? (
           <div className="rounded-3xl border border-sand-200 bg-sand-50/60 p-8 text-center backdrop-blur">
             <p className="text-ink-700">You haven't attended any completed events yet.</p>
             <p className="mt-2 text-sm text-ink-600">Events will appear here after they're completed.</p>
@@ -171,6 +245,48 @@ export default function GuestBookingsPage() {
               ))}
             </div>
           </div>
+        )}
+
+        {refundModal && (
+          <RefundModal
+            isOpen={!!refundModal}
+            onClose={() => {
+              setRefundModal(null);
+              // Reload bookings
+              (async () => {
+                const res = await apiFetch<{ upcoming: BookingItem[]; past: BookingItem[] }>(
+                  "/api/guest/my-bookings",
+                  {
+                    method: "GET",
+                    headers: { authorization: `Bearer ${token}` }
+                  }
+                );
+                if (res.ok && res.data) {
+                  setUpcoming(res.data.upcoming);
+                  setPast(res.data.past);
+                }
+              })();
+            }}
+            bookingId={refundModal.bookingId}
+            amount={refundModal.amount}
+            eventName={refundModal.eventName}
+            onSuccess={() => {
+              // Reload bookings
+              (async () => {
+                const res = await apiFetch<{ upcoming: BookingItem[]; past: BookingItem[] }>(
+                  "/api/guest/my-bookings",
+                  {
+                    method: "GET",
+                    headers: { authorization: `Bearer ${token}` }
+                  }
+                );
+                if (res.ok && res.data) {
+                  setUpcoming(res.data.upcoming);
+                  setPast(res.data.past);
+                }
+              })();
+            }}
+          />
         )}
       </Container>
     </main>

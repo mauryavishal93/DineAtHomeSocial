@@ -16,7 +16,7 @@ export async function POST(req: Request) {
       return serverError("Missing userId");
     }
 
-    await verifyUser(userId, ctx.adminId);
+    await verifyUser(userId, ctx.adminId, ctx.username);
     return ok({ success: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";

@@ -10,6 +10,13 @@ import { DashboardTab } from "@/components/admin/dashboard-tab";
 import { UsersTab } from "@/components/admin/users-tab";
 import { EventsTab } from "@/components/admin/events-tab";
 import { RevenueTab } from "@/components/admin/revenue-tab";
+import { BookingsTab } from "@/components/admin/bookings-tab";
+import { PaymentsTab } from "@/components/admin/payments-tab";
+import { ReviewsTab } from "@/components/admin/reviews-tab";
+import { VenuesTab } from "@/components/admin/venues-tab";
+import { SettingsTab } from "@/components/admin/settings-tab";
+import { AdminsTab } from "@/components/admin/admins-tab";
+import { AuditLogsTab } from "@/components/admin/audit-logs-tab";
 
 interface AnalyticsSummary {
   users: {
@@ -60,7 +67,30 @@ interface AnalyticsSummary {
   };
 }
 
-type Tab = "dashboard" | "users" | "events" | "revenue";
+type Tab =
+  | "dashboard"
+  | "users"
+  | "events"
+  | "revenue"
+  | "bookings"
+  | "payments"
+  | "reviews"
+  | "venues"
+  | "settings"
+  | "admins"
+  | "audit-logs";
+
+// Permission helper based on admin role
+function hasPermission(role: string, permission: string): boolean {
+  if (role === "SUPER_ADMIN") return true;
+  if (role === "MODERATOR") {
+    return ["dashboard", "users", "events", "bookings", "payments", "reviews", "venues", "audit-logs"].includes(permission);
+  }
+  if (role === "ANALYST") {
+    return ["dashboard", "events", "revenue", "payments", "audit-logs"].includes(permission);
+  }
+  return false;
+}
 
 export default function AdminPage() {
   const router = useRouter();
@@ -169,47 +199,139 @@ export default function AdminPage() {
         </div>
 
         {/* Tabs */}
-        <div className="mt-8 flex gap-2 border-b border-sand-200">
-          <button
-            onClick={() => setActiveTab("dashboard")}
-            className={`px-4 py-2 text-sm font-medium transition ${
-              activeTab === "dashboard"
-                ? "border-b-2 border-ink-900 text-ink-900"
-                : "text-ink-600 hover:text-ink-900"
-            }`}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={() => setActiveTab("users")}
-            className={`px-4 py-2 text-sm font-medium transition ${
-              activeTab === "users"
-                ? "border-b-2 border-ink-900 text-ink-900"
-                : "text-ink-600 hover:text-ink-900"
-            }`}
-          >
-            Users
-          </button>
-          <button
-            onClick={() => setActiveTab("events")}
-            className={`px-4 py-2 text-sm font-medium transition ${
-              activeTab === "events"
-                ? "border-b-2 border-ink-900 text-ink-900"
-                : "text-ink-600 hover:text-ink-900"
-            }`}
-          >
-            Events
-          </button>
-          <button
-            onClick={() => setActiveTab("revenue")}
-            className={`px-4 py-2 text-sm font-medium transition ${
-              activeTab === "revenue"
-                ? "border-b-2 border-ink-900 text-ink-900"
-                : "text-ink-600 hover:text-ink-900"
-            }`}
-          >
-            Revenue
-          </button>
+        <div className="mt-8 flex gap-2 border-b border-sand-200 overflow-x-auto">
+          {hasPermission(adminInfo?.role || "", "dashboard") && (
+            <button
+              onClick={() => setActiveTab("dashboard")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "dashboard"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Dashboard
+            </button>
+          )}
+          {hasPermission(adminInfo?.role || "", "users") && (
+            <button
+              onClick={() => setActiveTab("users")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "users"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Users
+            </button>
+          )}
+          {hasPermission(adminInfo?.role || "", "events") && (
+            <button
+              onClick={() => setActiveTab("events")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "events"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Events
+            </button>
+          )}
+          {hasPermission(adminInfo?.role || "", "revenue") && (
+            <button
+              onClick={() => setActiveTab("revenue")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "revenue"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Revenue
+            </button>
+          )}
+          {hasPermission(adminInfo?.role || "", "bookings") && (
+            <button
+              onClick={() => setActiveTab("bookings")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "bookings"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Bookings
+            </button>
+          )}
+          {hasPermission(adminInfo?.role || "", "payments") && (
+            <button
+              onClick={() => setActiveTab("payments")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "payments"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Payments
+            </button>
+          )}
+          {hasPermission(adminInfo?.role || "", "reviews") && (
+            <button
+              onClick={() => setActiveTab("reviews")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "reviews"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Reviews
+            </button>
+          )}
+          {hasPermission(adminInfo?.role || "", "venues") && (
+            <button
+              onClick={() => setActiveTab("venues")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "venues"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Venues
+            </button>
+          )}
+          {hasPermission(adminInfo?.role || "", "settings") && (
+            <button
+              onClick={() => setActiveTab("settings")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "settings"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Settings
+            </button>
+          )}
+          {hasPermission(adminInfo?.role || "", "admins") && (
+            <button
+              onClick={() => setActiveTab("admins")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "admins"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Admins
+            </button>
+          )}
+          {hasPermission(adminInfo?.role || "", "audit-logs") && (
+            <button
+              onClick={() => setActiveTab("audit-logs")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "audit-logs"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Audit Logs
+            </button>
+          )}
         </div>
 
         {/* Tab Content */}
@@ -218,6 +340,13 @@ export default function AdminPage() {
           {activeTab === "users" && <UsersTab />}
           {activeTab === "events" && <EventsTab />}
           {activeTab === "revenue" && <RevenueTab />}
+          {activeTab === "bookings" && <BookingsTab />}
+          {activeTab === "payments" && <PaymentsTab />}
+          {activeTab === "reviews" && <ReviewsTab />}
+          {activeTab === "venues" && <VenuesTab />}
+          {activeTab === "settings" && <SettingsTab />}
+          {activeTab === "admins" && <AdminsTab />}
+          {activeTab === "audit-logs" && <AuditLogsTab />}
         </div>
       </Container>
     </main>

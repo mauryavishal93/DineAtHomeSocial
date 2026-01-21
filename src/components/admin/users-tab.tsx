@@ -140,7 +140,14 @@ export function UsersTab() {
                 return (
                 <tr key={user._id}>
                   <td className="px-4 py-3 text-sm text-ink-600 font-mono">{user._id.slice(0, 8)}...</td>
-                  <td className="px-4 py-3 text-sm text-ink-900">{userName}</td>
+                  <td className="px-4 py-3">
+                    <a
+                      href={`/admin/users/${user._id}`}
+                      className="text-sm font-medium text-ink-900 hover:text-ink-600 hover:underline"
+                    >
+                      {userName}
+                    </a>
+                  </td>
                   <td className="px-4 py-3 text-sm text-ink-900">{user.email}</td>
                   <td className="px-4 py-3 text-sm text-ink-700">{user.role}</td>
                   <td className="px-4 py-3">

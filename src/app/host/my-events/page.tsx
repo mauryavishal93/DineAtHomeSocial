@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
+import { ReminderButton } from "@/components/events/reminder-button";
 import { RateGuestModal, GuestRatingData } from "@/components/modals/rate-guest-modal";
 
 type GuestInfo = {
@@ -153,47 +154,53 @@ export default function HostMyEventsPage() {
       guestName,
       guestAge,
       guestGender,
-      existingRating: res.data.existingRating,
+      existingRating: res.data.existingRating || null,
       isAdditionalGuest,
       guestIndex
     });
   };
 
-  const handleSubmitRating = async (data: GuestRatingData) => {
-    if (!token || !ratingModal) return;
+  const handleSubmitRating = async (ratingData: GuestRatingData) => {
+    if (!ratingModal || !token) return;
 
-    const requestBody: any = {
+    const body: any = {
       eventSlotId: ratingModal.eventId,
       bookingId: ratingModal.bookingId,
       guestUserId: ratingModal.guestUserId,
-      ...data
+      ...ratingData
     };
 
-    // Add additional guest info if applicable
     if (ratingModal.isAdditionalGuest && ratingModal.guestIndex !== undefined) {
-      requestBody.isAdditionalGuest = true;
-      requestBody.guestIndex = ratingModal.guestIndex;
+      body.isAdditionalGuest = true;
+      body.guestIndex = ratingModal.guestIndex;
     }
 
-    const res = await apiFetch<{ success: boolean; message: string }>(
-      "/api/host/rate-guest",
-      {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` },
-        body: JSON.stringify(requestBody)
+    const res = await apiFetch("/api/host/rate-guest", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (res.ok) {
+      setRatingModal(null);
+      // Reload events to refresh guest list
+      const refreshRes = await apiFetch<{ upcoming: HostEvent[]; past: HostEvent[] }>(
+        "/api/host/my-events",
+        {
+          method: "GET",
+          headers: { authorization: `Bearer ${token}` }
+        }
+      );
+      if (refreshRes.ok && refreshRes.data) {
+        setUpcoming(refreshRes.data.upcoming);
+        setPast(refreshRes.data.past);
       }
-    );
-
-    if (!res.ok) {
+    } else {
       alert(res.error || "Failed to submit rating");
-      return;
     }
-
-    alert("Rating submitted successfully!");
-    setRatingModal(null);
-    
-    // Refresh the page to update the UI
-    window.location.reload();
   };
 
   if (loading) {
@@ -229,10 +236,87 @@ export default function HostMyEventsPage() {
           </Button>
         </div>
 
-        {past.length === 0 ? (
+        {/* Upcoming Events */}
+        {upcoming.length > 0 && (
+          <div className="mb-12">
+            <h2 className="mb-6 font-display text-2xl tracking-tight text-ink-900">
+              Upcoming Events ({upcoming.length})
+            </h2>
+            <div className="space-y-6">
+              {upcoming.map((event) => (
+                <div
+                  key={event.id}
+                  className="overflow-hidden rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/30 to-violet-50/30 shadow-lg backdrop-blur"
+                >
+                  <div className="bg-gradient-to-r from-violet-100 via-pink-100 to-orange-100 p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h3 className="font-display text-2xl text-ink-900">{event.title}</h3>
+                        <div className="mt-2 space-y-1 text-sm text-ink-700">
+                          <div>📅 {event.eventDate}</div>
+                          <div>🕐 {event.eventTime}</div>
+                          <div>📍 {event.venueName}</div>
+                          <div className="text-xs">{event.venueAddress}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge tone="success">Upcoming</Badge>
+                        <div className="mt-3 text-sm">
+                          <div className="font-medium text-ink-900">
+                            {event.totalSeatsBooked} guests booked
+                          </div>
+                          <div className="text-ink-600">
+                            {event.seatsLeft} seats left
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex gap-2">
+                      <Button size="sm" variant="outline" asChild>
+                        <Link href={`/events/${event.id}`}>View Event</Link>
+                      </Button>
+                      <ReminderButton eventId={event.id} isHost={true} />
+                    </div>
+                  </div>
+
+                  {event.guests.length > 0 && (
+                    <div className="border-t border-violet-200 bg-white/80 p-6">
+                      <h4 className="mb-4 text-sm font-medium text-ink-900">
+                        Confirmed Guests ({event.guests.length})
+                      </h4>
+                      <div className="space-y-2">
+                        {event.guests.slice(0, 5).map((guest, idx) => (
+                          <div
+                            key={`${guest.bookingId}-${idx}`}
+                            className="flex items-center justify-between rounded-xl border border-violet-200 bg-white p-3"
+                          >
+                            <div>
+                              <div className="font-medium text-ink-900">{guest.guestName}</div>
+                              <div className="text-xs text-ink-600">{guest.guestMobile}</div>
+                            </div>
+                            <Badge tone="success">Confirmed</Badge>
+                          </div>
+                        ))}
+                        {event.guests.length > 5 && (
+                          <div className="text-center text-sm text-ink-600">
+                            +{event.guests.length - 5} more guests
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Past Events */}
+        {past.length === 0 && upcoming.length === 0 ? (
           <div className="rounded-3xl border border-sand-200 bg-sand-50/60 p-8 text-center backdrop-blur">
-            <p className="text-ink-700">You haven't hosted any completed events yet.</p>
-            <p className="mt-2 text-sm text-ink-600">Events will appear here after they're completed.</p>
+            <p className="text-ink-700">You haven't hosted any events yet.</p>
+            <p className="mt-2 text-sm text-ink-600">Create your first event to get started!</p>
             <Button className="mt-4" asChild>
               <Link href="/host/events/new">Create Your First Event</Link>
             </Button>

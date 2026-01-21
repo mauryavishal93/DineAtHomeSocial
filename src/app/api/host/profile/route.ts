@@ -9,6 +9,7 @@ const putSchema = z.object({
   firstName: z.string().min(1).max(40),
   lastName: z.string().min(1).max(40),
   age: z.coerce.number().int().min(0).max(99),
+  bio: z.string().max(1000).optional(),
   interests: z
     .union([z.array(z.string().min(1).max(60)), z.string()])
     .optional()
@@ -22,6 +23,12 @@ const putSchema = z.object({
     }),
   venueName: z.string().min(1).max(120),
   venueAddress: z.string().min(1).max(240),
+  locality: z.string().max(100).optional(),
+  city: z.string().max(100).optional(),
+  state: z.string().max(100).optional(),
+  country: z.string().max(100).optional(),
+  postalCode: z.string().max(20).optional(),
+  description: z.string().max(500).optional(),
   cuisines: z
     .union([z.array(z.string().min(1).max(40)), z.string()])
     .transform((v) => {
@@ -59,6 +66,11 @@ export async function GET(req: Request) {
         venueId: null,
         venueName: "",
         venueAddress: "",
+        locality: "",
+        city: "",
+        state: "",
+        country: "",
+        postalCode: "",
         cuisines: [],
         activities: [],
         latitude: null,

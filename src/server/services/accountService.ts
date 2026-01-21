@@ -70,6 +70,7 @@ export async function getGuestAccountOverview(userId: string) {
         lastName?: string;
         age?: number;
         gender?: string;
+        bio?: string;
         interests?: string[];
         ratingAvg?: number;
         ratingCount?: number;
@@ -79,6 +80,7 @@ export async function getGuestAccountOverview(userId: string) {
     name: `${profile?.firstName ?? ""} ${profile?.lastName ?? ""}`.trim(),
     age: profile?.age ?? 0,
     gender: profile?.gender ?? "",
+    bio: profile?.bio ?? "",
     interests: profile?.interests ?? [],
     ratingAvg: profile?.ratingAvg ?? 0,
     ratingCount: profile?.ratingCount ?? 0

@@ -9,6 +9,10 @@ const VenueSchema = new Schema(
     foodCategories: { type: [String], default: [] },
     gamesAvailable: { type: [String], default: [] },
     locality: { type: String, default: "", index: true },
+    city: { type: String, default: "", index: true },
+    state: { type: String, default: "", index: true },
+    country: { type: String, default: "" },
+    postalCode: { type: String, default: "" },
     geo: {
       type: new Schema(
         {

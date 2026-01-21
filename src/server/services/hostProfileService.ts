@@ -15,6 +15,11 @@ export async function getHostProfile(userId: string) {
         _id: unknown;
         name?: string;
         address?: string;
+        locality?: string;
+        city?: string;
+        state?: string;
+        country?: string;
+        postalCode?: string;
         foodCategories?: string[];
         gamesAvailable?: string[];
         geo?: { coordinates?: number[] };
@@ -27,12 +32,18 @@ export async function getHostProfile(userId: string) {
     firstName: (profile as any).firstName ?? "",
     lastName: (profile as any).lastName ?? "",
     age: (profile as any).age ?? 0,
+    bio: (profile as any).bio ?? "",
     interests: (profile as any).interests ?? [],
     name: (profile as any).name ?? "",
 
     venueId: venue?._id ? String(venue._id) : null,
     venueName: venue?.name ?? (profile as any).venueName ?? "",
     venueAddress: venue?.address ?? (profile as any).venueAddress ?? "",
+    locality: venue?.locality ?? "",
+    city: venue?.city ?? "",
+    state: venue?.state ?? "",
+    country: venue?.country ?? "",
+    postalCode: venue?.postalCode ?? "",
     cuisines: venue?.foodCategories ?? (profile as any).foodCategories ?? [],
     activities: venue?.gamesAvailable ?? (profile as any).availableGames ?? [],
     latitude: geo ? geo[1] : null,
@@ -48,8 +59,15 @@ export async function upsertHostProfile(
     lastName: string;
     age: number;
     interests: string[];
+    bio?: string;
     venueName: string;
     venueAddress: string;
+    locality?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postalCode?: string;
+    description?: string;
     cuisines: string[];
     activities: string[];
     latitude?: number | null;
@@ -60,39 +78,52 @@ export async function upsertHostProfile(
 
   const fullName = `${input.firstName} ${input.lastName}`.trim();
 
+  const profileUpdate: any = {
+    firstName: input.firstName,
+    lastName: input.lastName,
+    age: input.age,
+    interests: input.interests,
+    name: fullName,
+    venueName: input.venueName,
+    venueAddress: input.venueAddress,
+    foodCategories: input.cuisines,
+    availableGames: input.activities
+  };
+
+  if (input.bio !== undefined) {
+    profileUpdate.bio = input.bio;
+  }
+
   const profile = await HostProfile.findOneAndUpdate(
     { userId },
-    {
-      $set: {
-        firstName: input.firstName,
-        lastName: input.lastName,
-        age: input.age,
-        interests: input.interests,
-        name: fullName,
-        venueName: input.venueName,
-        venueAddress: input.venueAddress,
-        foodCategories: input.cuisines,
-        availableGames: input.activities
-      }
-    },
+    { $set: profileUpdate },
     { new: true, upsert: true }
   );
 
   // Upsert a Venue for this host and link it.
+  const venueUpdate: any = {
+    name: input.venueName,
+    address: input.venueAddress,
+    foodCategories: input.cuisines,
+    gamesAvailable: input.activities
+  };
+
+  // Always set address fields, even if empty strings (to allow clearing)
+  venueUpdate.locality = input.locality ?? "";
+  venueUpdate.city = input.city ?? "";
+  venueUpdate.state = input.state ?? "";
+  venueUpdate.country = input.country ?? "";
+  venueUpdate.postalCode = input.postalCode ?? "";
+  if (input.description !== undefined) {
+    venueUpdate.description = input.description;
+  }
+  if (typeof input.latitude === "number" && typeof input.longitude === "number") {
+    venueUpdate.geo = { type: "Point", coordinates: [input.longitude, input.latitude] };
+  }
+
   const venue = await Venue.findOneAndUpdate(
     { hostUserId: userId },
-    {
-      $set: {
-        name: input.venueName,
-        address: input.venueAddress,
-        foodCategories: input.cuisines,
-        gamesAvailable: input.activities,
-        geo:
-          typeof input.latitude === "number" && typeof input.longitude === "number"
-            ? { type: "Point", coordinates: [input.longitude, input.latitude] }
-            : undefined
-      }
-    },
+    { $set: venueUpdate },
     { new: true, upsert: true }
   );
 
@@ -106,10 +137,17 @@ export async function upsertHostProfile(
     lastName: (profile as any).lastName ?? "",
     age: (profile as any).age ?? 0,
     interests: (profile as any).interests ?? [],
+    bio: (profile as any).bio ?? "",
     name: (profile as any).name ?? "",
     venueId: String((venue as any)._id),
     venueName: venue?.name ?? "",
     venueAddress: venue?.address ?? "",
+    locality: venue?.locality ?? "",
+    city: venue?.city ?? "",
+    state: venue?.state ?? "",
+    country: venue?.country ?? "",
+    postalCode: venue?.postalCode ?? "",
+    description: venue?.description ?? "",
     cuisines: venue?.foodCategories ?? [],
     activities: venue?.gamesAvailable ?? [],
     latitude:

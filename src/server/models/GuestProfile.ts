@@ -19,6 +19,7 @@ const GuestProfileSchema = new Schema(
     lastName: { type: String, default: "" },
     gender: { type: String, default: "" },
     age: { type: Number, default: 0 },
+    bio: { type: String, default: "" },
     govtIdNumber: { type: String, default: "" },
     govtIdDocs: { type: [UploadedDocSchema], default: [] },
     profession: { type: String, default: "" },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 
@@ -16,6 +17,7 @@ export type UIEvent = {
   city?: string;
   venueName: string;
   hostName: string;
+  hostUserId: string;
   hostRating: number;
   verified: boolean;
   foodTags: string[];
@@ -28,17 +30,20 @@ export type UIEvent = {
 
 function formatDateLabel(iso: string) {
   const d = new Date(iso);
-  return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "2-digit", month: "short" }).format(d);
+  // Use 'en-US' locale to ensure consistent formatting between server and client
+  return new Intl.DateTimeFormat("en-US", { weekday: "short", day: "2-digit", month: "short" }).format(d);
 }
 
 function formatTimeLabel(startIso: string, endIso: string) {
   const s = new Date(startIso);
   const e = new Date(endIso);
-  const tf = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+  // Use 'en-US' locale to ensure consistent formatting between server and client
+  const tf = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
   return `${tf.format(s)} – ${tf.format(e)}`;
 }
 
 export function EventCard({ ev }: { ev: UIEvent }) {
+  const router = useRouter();
   const dateLabel = formatDateLabel(ev.startAt);
   const timeLabel = formatTimeLabel(ev.startAt, ev.endAt);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -62,7 +67,7 @@ export function EventCard({ ev }: { ev: UIEvent }) {
   return (
     <Link
       href={`/events/${ev.id}`}
-      className="group overflow-hidden rounded-2xl border border-sand-200 bg-white/60 shadow-soft backdrop-blur transition hover:-translate-y-0.5 hover:shadow-card"
+      className="group overflow-hidden rounded-3xl border-2 border-violet-100 bg-gradient-to-br from-white via-pink-50/30 to-violet-50/30 shadow-lg backdrop-blur transition-all duration-300 hover:-translate-y-2 hover:shadow-colorful hover:border-violet-200 hover:scale-[1.02]"
     >
       <div className="relative">
         <div className="relative h-44 overflow-hidden">
@@ -126,17 +131,30 @@ export function EventCard({ ev }: { ev: UIEvent }) {
               </svg>
             </div>
           )}
-          <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-full border border-sand-200 bg-white/70 px-2.5 py-1 text-xs text-ink-700">
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-ink-900 text-sand-50">
+          <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-full border-2 border-white/80 bg-gradient-to-r from-white/90 via-pink-50/90 to-violet-50/90 backdrop-blur-sm px-3 py-1.5 text-xs text-ink-700 shadow-lg">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 via-pink-500 to-orange-500 text-white font-bold shadow-md">
               {ev.hostName.slice(0, 1).toUpperCase()}
             </span>
-            <span className="font-medium text-ink-900">{ev.hostName}</span>
+            {ev.hostUserId && ev.hostUserId !== "undefined" ? (
+              <span
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  router.push(`/hosts/${ev.hostUserId}`);
+                }}
+                className="font-medium text-ink-900 hover:text-ink-600 hover:underline cursor-pointer"
+              >
+                {ev.hostName}
+              </span>
+            ) : (
+              <span className="font-medium text-ink-900">{ev.hostName}</span>
+            )}
             <span className="text-ink-600">• {ev.hostRating.toFixed(1)}</span>
           </div>
         </div>
         <div className="absolute left-4 top-4 z-20 flex gap-2">
-          {ev.verified ? <Badge tone="success">ID verified</Badge> : <Badge>New host</Badge>}
-          {ev.seatsLeft <= 3 ? <Badge tone="warning">Few seats</Badge> : null}
+          {ev.verified ? <Badge tone="success">✓ Verified</Badge> : <Badge tone="sky">✨ New</Badge>}
+          {ev.seatsLeft <= 3 ? <Badge tone="warning">⚡ Few seats</Badge> : null}
         </div>
       </div>
       <div className="p-4">
@@ -148,8 +166,8 @@ export function EventCard({ ev }: { ev: UIEvent }) {
             <div className="mt-1 text-sm text-ink-700">{ev.venueName}</div>
           </div>
           <div className="shrink-0 text-right">
-            <div className="text-sm font-semibold text-ink-900">₹{ev.priceFrom}</div>
-            <div className="text-xs text-ink-600">from / guest</div>
+            <div className="text-lg font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent">₹{ev.priceFrom}</div>
+            <div className="text-xs text-ink-600 font-medium">from / guest</div>
           </div>
         </div>
 
@@ -166,20 +184,20 @@ export function EventCard({ ev }: { ev: UIEvent }) {
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          {ev.cuisines && ev.cuisines.length > 0 && ev.cuisines.slice(0, 2).map((c) => (
-            <Badge key={c}>{c}</Badge>
+          {ev.cuisines && ev.cuisines.length > 0 && ev.cuisines.slice(0, 2).map((c, idx) => (
+            <Badge key={c} tone={idx === 0 ? "violet" : "pink"}>{c}</Badge>
           ))}
-          {ev.foodTags && ev.foodTags.length > 0 && ev.foodTags.slice(0, 2).map((t) => (
-            <Badge key={t}>{t}</Badge>
+          {ev.foodTags && ev.foodTags.length > 0 && ev.foodTags.slice(0, 2).map((t, idx) => (
+            <Badge key={t} tone={idx === 0 ? "orange" : "sky"}>{t}</Badge>
           ))}
-          {ev.activities && ev.activities.length > 0 && ev.activities.slice(0, 2).map((a) => (
-            <Badge key={a}>{a}</Badge>
+          {ev.activities && ev.activities.length > 0 && ev.activities.slice(0, 2).map((a, idx) => (
+            <Badge key={a} tone={idx === 0 ? "pink" : "violet"}>{a}</Badge>
           ))}
         </div>
 
-        <div className="mt-4 flex items-center justify-between border-t border-sand-200 pt-3 text-xs text-ink-600">
-          <span>Tap to view details & book</span>
-          <span className="rounded-full border border-sand-200 bg-sand-50/70 px-2 py-1">
+        <div className="mt-4 flex items-center justify-between border-t-2 border-gradient-to-r from-violet-200 via-pink-200 to-orange-200 bg-gradient-to-r from-violet-50/50 via-pink-50/50 to-orange-50/50 pt-3 px-2 -mx-2 -mb-2 rounded-b-3xl">
+          <span className="text-xs font-medium text-ink-700">Tap to view details & book</span>
+          <span className="rounded-full border-2 border-violet-300 bg-gradient-to-r from-violet-100 to-pink-100 px-3 py-1 text-xs font-semibold text-violet-800 shadow-sm">
             {dateLabel}
           </span>
         </div>

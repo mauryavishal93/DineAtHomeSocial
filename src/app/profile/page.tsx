@@ -20,6 +20,7 @@ const guestSchema = z.object({
   name: z.string().min(1).max(80),
   age: z.coerce.number().int().min(0).max(99),
   gender: z.enum(["Male", "Female", "Other"]),
+  bio: z.string().max(1000).optional(),
   interests: z
     .union([z.array(z.string()), z.string()])
     .default("")
@@ -40,6 +41,7 @@ const hostSchema = z.object({
   firstName: z.string().min(1).max(40),
   lastName: z.string().min(1).max(40),
   age: z.coerce.number().int().min(0).max(99),
+  bio: z.string().max(1000).optional(),
   interests: z
     .union([z.array(z.string()), z.string()])
     .default("")
@@ -52,6 +54,11 @@ const hostSchema = z.object({
     }),
   venueName: z.string().min(1).max(120),
   venueAddress: z.string().min(1).max(240),
+  locality: z.string().max(100).optional(),
+  city: z.string().max(100).optional(),
+  state: z.string().max(100).optional(),
+  country: z.string().max(100).optional(),
+  postalCode: z.string().max(20).optional(),
   cuisines: z
     .union([z.array(z.string()), z.string()])
     .default("")
@@ -77,13 +84,21 @@ type HostFormValues = z.input<typeof hostSchema>;
 
 export default function ProfilePage() {
   const router = useRouter();
-  const role = getRole();
-  const token = getAccessToken();
+  const [mounted, setMounted] = useState(false);
+  const [role, setRole] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [serverError, setServerError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [venueImages, setVenueImages] = useState<Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>>([]);
   const [uploadingVenueImages, setUploadingVenueImages] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [locality, setLocality] = useState<string>("");
+  const [city, setCity] = useState<string>("");
+  const [state, setState] = useState<string>("");
+  const [country, setCountry] = useState<string>("");
+  const [postalCode, setPostalCode] = useState<string>("");
+  const [isAutoFilling, setIsAutoFilling] = useState(false);
   const [guestOverview, setGuestOverview] = useState<{
     attendedEvents: Array<{
       bookingId: string;
@@ -107,7 +122,7 @@ export default function ProfilePage() {
 
   const guestForm = useForm<GuestFormValues>({
     resolver: zodResolver(guestSchema),
-    defaultValues: { name: "", age: 0, gender: "Male", interests: "" }
+    defaultValues: { name: "", age: 0, gender: "Male", bio: "", interests: "" }
   });
 
   const hostForm = useForm<HostFormValues>({
@@ -116,15 +131,30 @@ export default function ProfilePage() {
       firstName: "",
       lastName: "",
       age: 0,
+      bio: "",
       interests: "",
       venueName: "",
       venueAddress: "",
+      locality: "",
+      city: "",
+      state: "",
+      country: "",
+      postalCode: "",
       cuisines: "",
       activities: ""
     }
   });
 
+  // Only access localStorage after component mounts (client-side only)
   useEffect(() => {
+    setMounted(true);
+    setToken(getAccessToken());
+    setRole(getRole());
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    
     if (!token) {
       router.push("/auth/login");
       return;
@@ -141,7 +171,7 @@ export default function ProfilePage() {
 
       if (role === "GUEST") {
         const res = await apiFetch<{
-          profile: { name: string; age: number; gender: string; interests: string[] };
+          profile: { name: string; age: number; gender: string; bio?: string; interests: string[] };
           attendedEvents: Array<{
             bookingId: string;
             eventSlotId: string;
@@ -173,6 +203,7 @@ export default function ProfilePage() {
           name: res.data.profile?.name ?? "",
           age: res.data.profile?.age ?? 0,
           gender: (res.data.profile?.gender as "Male" | "Female" | "Other") ?? "Male",
+          bio: res.data.profile?.bio ?? "",
           interests: (res.data.profile?.interests ?? []).join(", ")
         });
         setGuestOverview({
@@ -188,12 +219,16 @@ export default function ProfilePage() {
           firstName: string;
           lastName: string;
           age: number;
+          bio?: string;
           interests: string[];
           name: string;
           venueName: string;
           venueAddress: string;
+          locality?: string;
           cuisines: string[];
           activities: string[];
+          latitude?: number | null;
+          longitude?: number | null;
           venueImages?: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>;
         }>("/api/host/profile", {
           method: "GET",
@@ -208,12 +243,23 @@ export default function ProfilePage() {
           firstName: res.data.firstName ?? "",
           lastName: res.data.lastName ?? "",
           age: res.data.age ?? 0,
+          bio: res.data.bio ?? "",
           interests: (res.data.interests ?? []).join(", "),
           venueName: res.data.venueName ?? "",
           venueAddress: res.data.venueAddress ?? "",
+          locality: res.data.locality ?? "",
+          city: res.data.city ?? "",
+          state: res.data.state ?? "",
+          country: res.data.country ?? "",
+          postalCode: res.data.postalCode ?? "",
           cuisines: (res.data.cuisines ?? []).join(", "),
           activities: (res.data.activities ?? []).join(", ")
         });
+        setLocality(res.data.locality ?? "");
+        setCity(res.data.city ?? "");
+        setState(res.data.state ?? "");
+        setCountry(res.data.country ?? "");
+        setPostalCode(res.data.postalCode ?? "");
         setVenueImages(res.data.venueImages ?? []);
         setGuestOverview(null);
         setLoading(false);
@@ -224,7 +270,93 @@ export default function ProfilePage() {
       setGuestOverview(null);
       setLoading(false);
     })();
-  }, [guestForm, hostForm, role, router, token]);
+  }, [guestForm, hostForm, role, router, token, mounted]);
+
+  // Auto-fill address components when venue address changes
+  useEffect(() => {
+    if (!mounted || !isEditing || role !== "HOST") return;
+    
+    const address = hostForm.watch("venueAddress");
+    if (!address || address.trim().length < 10) return;
+
+    // Debounce auto-fill
+    const timeoutId = setTimeout(async () => {
+      setIsAutoFilling(true);
+      try {
+        const res = await apiFetch<{
+          locality?: string;
+          city?: string;
+          state?: string;
+          country?: string;
+          postalCode?: string;
+        }>(`/api/geocode?address=${encodeURIComponent(address.trim())}`);
+        
+        if (res.ok && res.data) {
+          // Only auto-fill if fields are empty (don't overwrite user input)
+          if (res.data.locality && !locality) setLocality(res.data.locality);
+          if (res.data.city && !city) setCity(res.data.city);
+          if (res.data.state && !state) setState(res.data.state);
+          if (res.data.country && !country) setCountry(res.data.country);
+          if (res.data.postalCode && !postalCode) setPostalCode(res.data.postalCode);
+        }
+      } catch (error) {
+        // Silently fail - user can fill manually
+        console.error("Auto-fill failed:", error);
+      } finally {
+        setIsAutoFilling(false);
+      }
+    }, 2000); // Wait 2 seconds after user stops typing
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hostForm.watch("venueAddress"), mounted, isEditing, role]);
+
+  // Auto-fill locality, city, and state when postal code changes
+  useEffect(() => {
+    if (!mounted || !isEditing || role !== "HOST") return;
+    
+    // Check if postal code is valid (at least 4-6 digits)
+    if (!postalCode || postalCode.trim().length < 4) return;
+    
+    // Only proceed if locality, city, or state are empty
+    if (locality && city && state) return;
+
+    // Debounce auto-fill
+    const timeoutId = setTimeout(async () => {
+      setIsAutoFilling(true);
+      try {
+        // Try geocoding with postal code + country if available
+        let searchQuery = postalCode.trim();
+        if (country) {
+          searchQuery = `${postalCode.trim()}, ${country}`;
+        }
+        
+        const res = await apiFetch<{
+          locality?: string;
+          city?: string;
+          state?: string;
+          country?: string;
+          postalCode?: string;
+        }>(`/api/geocode?address=${encodeURIComponent(searchQuery)}`);
+        
+        if (res.ok && res.data) {
+          // Auto-fill empty fields (don't overwrite existing values)
+          if (res.data.locality && !locality) setLocality(res.data.locality);
+          if (res.data.city && !city) setCity(res.data.city);
+          if (res.data.state && !state) setState(res.data.state);
+          if (res.data.country && !country) setCountry(res.data.country);
+        }
+      } catch (error) {
+        // Silently fail - user can fill manually
+        console.error("Postal code auto-fill failed:", error);
+      } finally {
+        setIsAutoFilling(false);
+      }
+    }, 1500); // Wait 1.5 seconds after user stops typing postal code
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postalCode, mounted, isEditing, role]);
 
   const onSubmitGuest = useMemo(
     () =>
@@ -242,6 +374,7 @@ export default function ProfilePage() {
           return;
         }
         setSavedMsg("Profile saved.");
+        setIsEditing(false);
       }),
     [guestForm, router, token]
   );
@@ -252,19 +385,39 @@ export default function ProfilePage() {
         if (!token) return;
         setServerError(null);
         setSavedMsg(null);
+        const payload = {
+          ...values,
+          locality: locality || "",
+          city: city || "",
+          state: state || "",
+          country: country || "",
+          postalCode: postalCode || ""
+        };
         const res = await apiFetch("/api/host/profile", {
           method: "PUT",
           headers: { authorization: `Bearer ${token}` },
-          body: JSON.stringify(values as z.output<typeof hostSchema>)
+          body: JSON.stringify(payload as z.output<typeof hostSchema>)
         });
         if (!res.ok) {
           setServerError(res.error);
           return;
         }
         setSavedMsg("Profile saved.");
+        setIsEditing(false);
       }),
-    [hostForm, router, token]
+    [hostForm, router, token, locality, city, state, country, postalCode]
   );
+
+  // Show loading state during SSR or before mount
+  if (!mounted) {
+    return (
+      <main className="py-10">
+        <Container className="max-w-xl">
+          <div className="text-sm text-ink-700">Loading...</div>
+        </Container>
+      </main>
+    );
+  }
 
   return (
     <main className="py-10">
@@ -275,12 +428,58 @@ export default function ProfilePage() {
           <Badge tone="success">Complete setup</Badge>
         </div>
 
-        <h1 className="mt-4 font-display text-4xl tracking-tight text-ink-900">
-          Your details
-        </h1>
-        <p className="mt-2 text-sm text-ink-700">
-          Please complete your profile to continue.
-        </p>
+        <div className="mt-4 flex items-center justify-between">
+          <div>
+            <h1 className="font-display text-4xl tracking-tight text-ink-900">
+              Your details
+            </h1>
+            <p className="mt-2 text-sm text-ink-700">
+              {!isEditing && (role === "HOST" || role === "GUEST")
+                ? "View and manage your profile"
+                : "Please complete your profile to continue."}
+            </p>
+          </div>
+          {(role === "HOST" || role === "GUEST") && !loading && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsEditing(!isEditing);
+                if (isEditing) {
+                  // Reset form when canceling edit
+                  if (role === "HOST") {
+                    const currentValues = hostForm.getValues();
+                    hostForm.reset(currentValues);
+                  } else if (role === "GUEST") {
+                    const currentValues = guestForm.getValues();
+                    guestForm.reset(currentValues);
+                  }
+                }
+              }}
+            >
+              {isEditing ? (
+                "Cancel"
+              ) : (
+                <>
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                  Edit
+                </>
+              )}
+            </Button>
+          )}
+        </div>
 
         <div className="mt-6 rounded-3xl border border-sand-200 bg-white/60 p-6 shadow-card backdrop-blur">
           {serverError ? <Alert title="Error" desc={serverError} /> : null}
@@ -289,18 +488,122 @@ export default function ProfilePage() {
           {loading ? (
             <div className="text-sm text-ink-700">Loading…</div>
           ) : role === "GUEST" ? (
-            <form onSubmit={onSubmitGuest} className="space-y-4">
-              <Input
-                label="Full name"
-                placeholder="Your name"
-                {...guestForm.register("name")}
-                error={guestForm.formState.errors.name?.message}
-              />
-              <div className="grid gap-4 sm:grid-cols-2">
+            <>
+              {isEditing ? (
+                <form onSubmit={onSubmitGuest} className="space-y-4">
+                  <Input
+                    label="Full name"
+                    placeholder="Your name"
+                    {...guestForm.register("name")}
+                    error={guestForm.formState.errors.name?.message}
+                  />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Select
+                      label="Age"
+                      {...guestForm.register("age")}
+                      error={guestForm.formState.errors.age?.message}
+                    >
+                      {AGE_OPTIONS.map((a) => (
+                        <option key={a} value={a}>
+                          {a}
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      label="Gender"
+                      {...guestForm.register("gender")}
+                      error={guestForm.formState.errors.gender?.message}
+                    >
+                      {GENDER_OPTIONS.map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-ink-700 mb-1">Bio</label>
+                    <textarea
+                      {...guestForm.register("bio")}
+                      placeholder="Tell us about yourself..."
+                      rows={4}
+                      className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <Input
+                    label="Interests"
+                    placeholder="Comma separated (e.g. music, travel)"
+                    {...guestForm.register("interests")}
+                    error={guestForm.formState.errors.interests?.message}
+                  />
+                  <div className="flex gap-3">
+                    <Button type="submit" disabled={guestForm.formState.isSubmitting}>
+                      {guestForm.formState.isSubmitting ? "Saving..." : "Save Changes"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsEditing(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-6">
+                  {/* View Mode for Guest */}
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Full Name</div>
+                    <div className="mt-1 text-sm text-ink-900">{guestForm.watch("name") || "Not set"}</div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Age</div>
+                      <div className="mt-1 text-sm text-ink-900">{guestForm.watch("age") || "Not set"}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Gender</div>
+                      <div className="mt-1 text-sm text-ink-900">{guestForm.watch("gender") || "Not set"}</div>
+                    </div>
+                  </div>
+                  {guestForm.watch("bio") && (
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Bio</div>
+                      <div className="mt-1 text-sm text-ink-900">{guestForm.watch("bio")}</div>
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Interests</div>
+                    <div className="mt-1 text-sm text-ink-900">
+                      {guestForm.watch("interests") || "Not set"}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : role === "HOST" ? (
+            <>
+            {isEditing ? (
+              <form onSubmit={onSubmitHost} className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input
+                    label="First name"
+                    placeholder="First name"
+                    {...hostForm.register("firstName")}
+                    error={hostForm.formState.errors.firstName?.message}
+                  />
+                  <Input
+                    label="Last name"
+                    placeholder="Last name"
+                    {...hostForm.register("lastName")}
+                    error={hostForm.formState.errors.lastName?.message}
+                  />
+                </div>
+
                 <Select
                   label="Age"
-                  {...guestForm.register("age")}
-                  error={guestForm.formState.errors.age?.message}
+                  {...hostForm.register("age")}
+                  error={hostForm.formState.errors.age?.message}
                 >
                   {AGE_OPTIONS.map((a) => (
                     <option key={a} value={a}>
@@ -308,92 +611,190 @@ export default function ProfilePage() {
                     </option>
                   ))}
                 </Select>
-                <Select
-                  label="Gender"
-                  {...guestForm.register("gender")}
-                  error={guestForm.formState.errors.gender?.message}
-                >
-                  {GENDER_OPTIONS.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <Input
-                label="Interests"
-                placeholder="Comma separated (e.g. music, travel)"
-                {...guestForm.register("interests")}
-                error={guestForm.formState.errors.interests?.message}
-              />
-              <Button type="submit" disabled={guestForm.formState.isSubmitting}>
-                {guestForm.formState.isSubmitting ? "Saving..." : "Save & continue"}
-              </Button>
-            </form>
-          ) : role === "HOST" ? (
-            <>
-            <form onSubmit={onSubmitHost} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
+
+                <div>
+                  <label className="block text-sm font-medium text-ink-700 mb-1">Bio</label>
+                  <textarea
+                    {...hostForm.register("bio")}
+                    placeholder="Tell guests about yourself..."
+                    rows={4}
+                    className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm"
+                  />
+                </div>
+
                 <Input
-                  label="First name"
-                  placeholder="First name"
-                  {...hostForm.register("firstName")}
-                  error={hostForm.formState.errors.firstName?.message}
+                  label="Interests"
+                  placeholder="Comma separated (e.g. music, travel)"
+                  {...hostForm.register("interests")}
+                  error={hostForm.formState.errors.interests?.message as string | undefined}
                 />
                 <Input
-                  label="Last name"
-                  placeholder="Last name"
-                  {...hostForm.register("lastName")}
-                  error={hostForm.formState.errors.lastName?.message}
+                  label="Venue name"
+                  placeholder="e.g. Vishal's Home Kitchen"
+                  {...hostForm.register("venueName")}
+                  error={hostForm.formState.errors.venueName?.message}
                 />
+                <div>
+                  <Input
+                    label="Venue address"
+                    placeholder="Full address (e.g., 123 Main Street, Indiranagar, Bengaluru)"
+                    {...hostForm.register("venueAddress")}
+                    error={hostForm.formState.errors.venueAddress?.message}
+                  />
+                  {isAutoFilling && (
+                    <p className="mt-1 text-xs text-ink-600">Auto-filling address details...</p>
+                  )}
+                </div>
+                <Input
+                  label="Locality"
+                  placeholder="e.g., Indiranagar (auto-filled from address or postal code)"
+                  value={locality}
+                  onChange={(e) => setLocality(e.target.value)}
+                />
+                <Input
+                  label="City"
+                  placeholder="e.g., Bengaluru (auto-filled from address or postal code)"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                />
+                <Input
+                  label="State"
+                  placeholder="e.g., Karnataka (auto-filled from address or postal code)"
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
+                />
+                <Input
+                  label="Country"
+                  placeholder="e.g., India (auto-filled from address)"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                />
+                <Input
+                  label="Postal Code"
+                  placeholder="e.g., 560038 (enter to auto-fill locality, city, state)"
+                  value={postalCode}
+                  onChange={(e) => setPostalCode(e.target.value)}
+                />
+
+                <Input
+                  label="Cuisine served"
+                  placeholder="Comma separated (e.g. North Indian, Vegan)"
+                  {...hostForm.register("cuisines")}
+                  error={hostForm.formState.errors.cuisines?.message as string | undefined}
+                />
+                <Input
+                  label="Activities available"
+                  placeholder="Comma separated (e.g. Carrom, Cards, TV, Music)"
+                  {...hostForm.register("activities")}
+                  error={hostForm.formState.errors.activities?.message as string | undefined}
+                />
+                <div className="flex gap-3">
+                  <Button type="submit" disabled={hostForm.formState.isSubmitting}>
+                    {hostForm.formState.isSubmitting ? "Saving..." : "Save Changes"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsEditing(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-6">
+                {/* View Mode */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-ink-600">First Name</div>
+                    <div className="mt-1 text-sm text-ink-900">{hostForm.watch("firstName") || "Not set"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Last Name</div>
+                    <div className="mt-1 text-sm text-ink-900">{hostForm.watch("lastName") || "Not set"}</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Age</div>
+                  <div className="mt-1 text-sm text-ink-900">{hostForm.watch("age") || "Not set"}</div>
+                </div>
+                {hostForm.watch("bio") && (
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Bio</div>
+                    <div className="mt-1 text-sm text-ink-900">{hostForm.watch("bio")}</div>
+                  </div>
+                )}
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Interests</div>
+                  <div className="mt-1 text-sm text-ink-900">
+                    {hostForm.watch("interests") || "Not set"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Venue Name</div>
+                  <div className="mt-1 text-sm text-ink-900">{hostForm.watch("venueName") || "Not set"}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Venue Address</div>
+                  <div className="mt-1 text-sm text-ink-900">{hostForm.watch("venueAddress") || "Not set"}</div>
+                </div>
+                {/* Always show address fields section if any address data exists */}
+                {(locality || city || state || country || postalCode || hostForm.watch("venueAddress")) && (
+                  <>
+                    {locality && (
+                      <div>
+                        <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Locality</div>
+                        <div className="mt-1 text-sm text-ink-900">{locality}</div>
+                      </div>
+                    )}
+                    {city && (
+                      <div>
+                        <div className="text-xs font-medium uppercase tracking-wide text-ink-600">City</div>
+                        <div className="mt-1 text-sm text-ink-900">{city}</div>
+                      </div>
+                    )}
+                    {state && (
+                      <div>
+                        <div className="text-xs font-medium uppercase tracking-wide text-ink-600">State</div>
+                        <div className="mt-1 text-sm text-ink-900">{state}</div>
+                      </div>
+                    )}
+                    {country && (
+                      <div>
+                        <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Country</div>
+                        <div className="mt-1 text-sm text-ink-900">{country}</div>
+                      </div>
+                    )}
+                    {postalCode && (
+                      <div>
+                        <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Postal Code</div>
+                        <div className="mt-1 text-sm text-ink-900">{postalCode}</div>
+                      </div>
+                    )}
+                  </>
+                )}
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Cuisines</div>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {hostForm.watch("cuisines")
+                      ? hostForm.watch("cuisines").split(", ").filter(Boolean).map((c, i) => (
+                          <Badge key={i}>{c}</Badge>
+                        ))
+                      : "Not set"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Activities</div>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {hostForm.watch("activities")
+                      ? hostForm.watch("activities").split(", ").filter(Boolean).map((a, i) => (
+                          <Badge key={i}>{a}</Badge>
+                        ))
+                      : "Not set"}
+                  </div>
+                </div>
               </div>
-
-              <Select
-                label="Age"
-                {...hostForm.register("age")}
-                error={hostForm.formState.errors.age?.message}
-              >
-                {AGE_OPTIONS.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </Select>
-
-              <Input
-                label="Interests"
-                placeholder="Comma separated (e.g. music, travel)"
-                {...hostForm.register("interests")}
-                error={hostForm.formState.errors.interests?.message as string | undefined}
-              />
-              <Input
-                label="Venue name"
-                placeholder="e.g. Vishal’s Home Kitchen"
-                {...hostForm.register("venueName")}
-                error={hostForm.formState.errors.venueName?.message}
-              />
-              <Input
-                label="Venue address"
-                placeholder="Locality / address"
-                {...hostForm.register("venueAddress")}
-                error={hostForm.formState.errors.venueAddress?.message}
-              />
-              <Input
-                label="Cuisine served"
-                placeholder="Comma separated (e.g. North Indian, Vegan)"
-                {...hostForm.register("cuisines")}
-                error={hostForm.formState.errors.cuisines?.message as string | undefined}
-              />
-              <Input
-                label="Activities available"
-                placeholder="Comma separated (e.g. Carrom, Cards, TV, Music)"
-                {...hostForm.register("activities")}
-                error={hostForm.formState.errors.activities?.message as string | undefined}
-              />
-              <Button type="submit" disabled={hostForm.formState.isSubmitting}>
-                {hostForm.formState.isSubmitting ? "Saving..." : "Save & continue"}
-              </Button>
-            </form>
+            )}
 
             <div className="mt-8 space-y-4 border-t border-sand-200 pt-6">
               <div className="flex items-center justify-between">
