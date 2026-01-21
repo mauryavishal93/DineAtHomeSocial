@@ -37,7 +37,7 @@ export function CheckInButton({
       return;
     }
 
-    const res = await apiFetch(`/api/events/${eventId}/checkin`, {
+    const res = await apiFetch<{ checkedIn: boolean; qrCode?: string | null }>(`/api/events/${eventId}/checkin`, {
       headers: { authorization: `Bearer ${token}` }
     });
 
@@ -69,7 +69,7 @@ export function CheckInButton({
     if (res.ok) {
       setCheckedIn(true);
       onCheckIn?.();
-    } else {
+    } else if (!res.ok) {
       alert(res.error || "Failed to check in");
     }
   };

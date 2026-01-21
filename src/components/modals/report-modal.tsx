@@ -102,7 +102,7 @@ export function ReportModal({
         setDescription("");
         setEvidence("");
       }, 2000);
-    } else {
+    } else if (!res.ok) {
       alert(res.error || "Failed to submit report");
     }
   };
@@ -179,6 +179,7 @@ export function ReportModal({
                 Evidence (Screenshot URLs, comma-separated)
               </label>
               <Input
+                label="Evidence"
                 placeholder="https://example.com/screenshot1.png, https://example.com/screenshot2.png"
                 value={evidence}
                 onChange={(e) => setEvidence(e.target.value)}

@@ -107,7 +107,7 @@ export function AddressMap({
           postalCode: postalCode || ""
         });
         setGeocodeError(null); // Clear any previous errors
-      } else {
+      } else if (!res.ok) {
         const errorMsg = res.error || "Failed to find location. Please try a more specific address.";
         setGeocodeError(errorMsg);
         console.error("Geocoding API error:", res.error);

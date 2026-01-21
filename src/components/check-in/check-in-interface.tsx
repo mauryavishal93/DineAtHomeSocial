@@ -76,7 +76,7 @@ export function CheckInInterface({ eventId }: CheckInInterfaceProps) {
           message: res.data.error || res.data.message || "Failed to verify event code"
         });
       }
-    } else {
+    } else if (!res.ok) {
       // API request failed
       setResult({
         success: false,
@@ -94,11 +94,9 @@ export function CheckInInterface({ eventId }: CheckInInterfaceProps) {
   return (
     <div className="space-y-4">
       <div className="bg-white/80 rounded-xl p-4 border border-violet-200">
-        <label className="block text-sm font-medium text-ink-900 mb-2">
-          Enter Event Code
-        </label>
         <div className="flex gap-2">
           <Input
+            label="Enter Event Code"
             type="text"
             value={eventCode}
             onChange={(e) => {

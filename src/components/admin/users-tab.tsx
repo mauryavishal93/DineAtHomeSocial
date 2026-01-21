@@ -37,9 +37,9 @@ export function UsersTab() {
         headers: { Authorization: `Bearer ${token}` }
       }
     );
-    if (res.ok) {
+    if (res.ok && res.data) {
       setUsers(res.data.users);
-    } else {
+    } else if (!res.ok) {
       console.error("Failed to load users:", res.error);
     }
     setLoading(false);
@@ -58,7 +58,7 @@ export function UsersTab() {
     });
     if (res.ok) {
       loadUsers();
-    } else {
+    } else if (!res.ok) {
       console.error("Failed to update user status:", res.error);
     }
   }
@@ -76,7 +76,7 @@ export function UsersTab() {
     });
     if (res.ok) {
       loadUsers();
-    } else {
+    } else if (!res.ok) {
       console.error("Failed to verify user:", res.error);
     }
   }

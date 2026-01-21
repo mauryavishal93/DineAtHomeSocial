@@ -37,9 +37,9 @@ export function BookingsTab() {
       `/api/admin/bookings?${params}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
-    if (res.ok) {
+    if (res.ok && res.data) {
       setBookings(res.data.bookings);
-    } else {
+    } else if (!res.ok) {
       console.error("Failed to load bookings:", res.error);
     }
     setLoading(false);
@@ -57,7 +57,7 @@ export function BookingsTab() {
     });
     if (res.ok) {
       loadBookings();
-    } else {
+    } else if (!res.ok) {
       alert(`Failed to cancel booking: ${res.error}`);
     }
   }

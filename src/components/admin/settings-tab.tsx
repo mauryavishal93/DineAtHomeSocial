@@ -43,7 +43,7 @@ export function SettingsTab() {
     });
     if (res.ok) {
       alert("Settings saved successfully!");
-    } else {
+    } else if (!res.ok) {
       alert(`Failed to save settings: ${res.error}`);
     }
     setSaving(false);

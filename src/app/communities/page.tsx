@@ -75,7 +75,7 @@ export default function CommunitiesPage() {
 
     if (res.ok) {
       loadCommunities();
-    } else {
+    } else if (!res.ok) {
       alert(res.error || "Failed to join community");
     }
   };
@@ -107,7 +107,7 @@ export default function CommunitiesPage() {
       setIsCreating(false);
       setNewCommunity({ name: "", description: "", category: "CUISINE", tags: "" });
       loadCommunities();
-    } else {
+    } else if (!res.ok) {
       alert(res.error || "Failed to create community");
     }
   };

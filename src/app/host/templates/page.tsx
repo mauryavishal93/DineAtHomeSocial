@@ -128,7 +128,7 @@ export default function TemplatesPage() {
 
     if (res.ok) {
       loadTemplates();
-    } else {
+    } else if (!res.ok) {
       alert(res.error || "Failed to delete template");
     }
   };

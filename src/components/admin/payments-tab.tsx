@@ -51,7 +51,7 @@ export function PaymentsTab() {
     });
     if (res.ok) {
       loadPayments();
-    } else {
+    } else if (!res.ok) {
       alert(`Failed to process refund: ${res.error}`);
     }
   }

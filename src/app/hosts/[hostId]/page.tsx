@@ -86,9 +86,9 @@ export default function HostProfilePage() {
     setError(null);
 
     const res = await apiFetch<any>(`/api/hosts/${hostId}`);
-    if (res.ok) {
+    if (res.ok && res.data) {
       setHostData(res.data);
-    } else {
+    } else if (!res.ok) {
       setError(res.error || "Failed to load host profile");
     }
     setLoading(false);

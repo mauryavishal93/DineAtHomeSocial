@@ -38,7 +38,7 @@ export function ReminderButton({ eventId, isHost = false }: ReminderButtonProps)
     setSending(true);
     const token = getAccessToken();
 
-    const res = await apiFetch(`/api/events/${eventId}/reminders`, {
+    const res = await apiFetch<{ success: boolean; message: string; sentCount: number }>(`/api/events/${eventId}/reminders`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${token}`,
@@ -52,7 +52,7 @@ export function ReminderButton({ eventId, isHost = false }: ReminderButtonProps)
     if (res.ok && res.data) {
       alert(`Reminders sent to ${res.data.sentCount} guests!`);
       loadReminderStatus();
-    } else {
+    } else if (!res.ok) {
       alert(res.error || "Failed to send reminders");
     }
   };

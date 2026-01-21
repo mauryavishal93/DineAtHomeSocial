@@ -78,7 +78,7 @@ export function RefundModal({
       
       if (res.ok && res.data) {
         setCancellationInfo(res.data);
-      } else {
+      } else if (!res.ok) {
         setErrorMessage(res.error || "Failed to load cancellation information");
       }
     } catch (error) {
@@ -139,7 +139,7 @@ export function RefundModal({
           setCustomReason("");
           setShowSuccess(false);
         }, 5000);
-      } else {
+      } else if (!res.ok) {
         setErrorMessage(res.error || "Failed to cancel booking. Please try again.");
       }
     } catch (error) {
@@ -355,6 +355,7 @@ export function RefundModal({
                   Please specify
                 </label>
                 <Input
+                  label="Custom Reason"
                   placeholder="Enter reason..."
                   value={customReason}
                   onChange={(e) => setCustomReason(e.target.value)}
