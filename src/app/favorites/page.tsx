@@ -168,7 +168,7 @@ export default function FavoritesPage() {
                             </div>
                             <div className="mb-3 space-y-1 text-sm text-ink-700">
                               <div>📅 {new Date(fav.event.startAt).toLocaleDateString()}</div>
-                              <div>💰 ₹{fav.event.priceFrom / 100}</div>
+                              <div>💰 ₹{Math.round(fav.event.priceFrom)}</div>
                               <div>👥 {fav.event.seatsLeft} seats left</div>
                             </div>
                             <Button className="w-full" variant="outline" asChild>

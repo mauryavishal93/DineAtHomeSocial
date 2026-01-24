@@ -1,23 +1,122 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { EventsGrid } from "@/components/events/events-grid";
+import { SearchBar } from "@/components/home/search-bar";
+import { TestimonialsSection } from "@/components/home/testimonials-section";
+import { TrendingEvents } from "@/components/home/trending-events";
+import { CategoryFilters } from "@/components/home/category-filters";
+import { EventCalendar } from "@/components/home/event-calendar";
+import { apiFetch } from "@/lib/http";
+
+interface FeaturedEvent {
+  id: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  priceFrom: number;
+  seatsLeft: number;
+  hostName: string;
+  verified: boolean;
+  city: string;
+  locality: string;
+  cuisines: string[];
+  activities: string[];
+  eventImages?: Array<{ filePath: string; fileMime: string; fileName: string }>;
+}
+
+interface PlatformStats {
+  totalEvents: number;
+  totalHosts: number;
+  totalGuests: number;
+  upcomingEvents: number;
+}
 
 export default function HomePage() {
+  const [mounted, setMounted] = useState(false);
   const [cityFilter, setCityFilter] = useState("");
   const [localityFilter, setLocalityFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");
+  const [categoryFilters, setCategoryFilters] = useState<{
+    cuisines?: string[];
+    activities?: string[];
+    dietary?: string[];
+  }>({});
+  const [featuredEvent, setFeaturedEvent] = useState<FeaturedEvent | null>(null);
+  const [stats, setStats] = useState<PlatformStats | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  const [loadingFeatured, setLoadingFeatured] = useState(true);
   
   const filters = {
     cities: cityFilter ? [cityFilter] : undefined,
     localities: localityFilter ? [localityFilter] : undefined,
-    states: stateFilter ? [stateFilter] : undefined
+    states: stateFilter ? [stateFilter] : undefined,
+    ...categoryFilters
   };
+
+  // Fetch featured event (next upcoming event)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiFetch<any[]>("/api/events");
+        if (res.ok && res.data && res.data.length > 0) {
+          // Get the first upcoming event
+          const event = res.data[0];
+          setFeaturedEvent({
+            id: event.id,
+            title: event.title,
+            startAt: event.startAt,
+            endAt: event.endAt,
+            priceFrom: event.priceFrom || 0,
+            seatsLeft: event.seatsLeft || 0,
+            hostName: event.hostName || "Host",
+            verified: Boolean(event.verified),
+            city: event.city || "",
+            locality: event.locality || "",
+            cuisines: event.cuisines || [],
+            activities: event.activities || [],
+            eventImages: event.eventImages || []
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load featured event:", error);
+      } finally {
+        setLoadingFeatured(false);
+      }
+    })();
+  }, []);
+
+  // Fetch platform statistics
+  useEffect(() => {
+    if (!mounted) return; // Only fetch stats after component is mounted
+    (async () => {
+      try {
+        // Fetch events to get stats
+        const eventsRes = await apiFetch<any[]>("/api/events");
+        if (eventsRes.ok && eventsRes.data) {
+          const now = new Date();
+          const upcoming = eventsRes.data.filter((e: any) => new Date(e.startAt) > now);
+          
+          setStats({
+            totalEvents: eventsRes.data.length,
+            upcomingEvents: upcoming.length,
+            totalHosts: new Set(eventsRes.data.map((e: any) => e.hostUserId)).size,
+            totalGuests: 0 // Would need separate API call
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load stats:", error);
+      }
+    })();
+  }, [mounted]);
   return (
     <main>
       <section className="pt-10 md:pt-16">
@@ -36,6 +135,12 @@ export default function HomePage() {
                 Home-hosted dining, made social. Book a seat, pay securely, and meet
                 guests who share your food preferences and interests.
               </p>
+              
+              {/* Search Bar */}
+              <div className="pt-2">
+                {mounted && <SearchBar />}
+              </div>
+              
               <div className="flex flex-wrap gap-3">
                 <Button size="lg" asChild>
                   <Link href="/events">Explore events</Link>
@@ -80,78 +185,118 @@ export default function HomePage() {
             </div>
 
             <div className="relative animate-floaty">
-              <div className="mask-fade-b overflow-hidden rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/50 to-violet-50/50 shadow-colorful backdrop-blur">
-                <div className="relative h-64 bg-gradient-to-br from-violet-100 via-pink-100 via-orange-100 to-yellow-100 md:h-80">
-                  <svg
-                    className="absolute inset-0 h-full w-full opacity-[0.35]"
-                    viewBox="0 0 800 500"
-                    preserveAspectRatio="none"
-                    aria-hidden="true"
-                  >
-                    <defs>
-                      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0" stopColor="#dbc7ad" stopOpacity="0.9" />
-                        <stop offset="1" stopColor="#ffffff" stopOpacity="0.1" />
-                      </linearGradient>
-                    </defs>
-                    <path
-                      d="M0,310 C160,250 250,410 390,360 C520,315 590,180 800,240 L800,500 L0,500 Z"
-                      fill="url(#g)"
-                    />
-                    <path
-                      d="M0,260 C120,220 260,300 360,280 C500,250 590,120 800,170"
-                      fill="none"
-                      stroke="#b78a59"
-                      strokeOpacity="0.35"
-                      strokeWidth="2"
-                    />
-                  </svg>
-                </div>
-                <div className="p-6">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="text-xs font-medium uppercase tracking-wide text-ink-600">
-                        Tonight’s table
-                      </div>
-                      <div className="font-display text-xl text-ink-900">
-                        Comfort food + conversation.
-                      </div>
-                    </div>
-                    <div className="rounded-full border-2 border-violet-300 bg-gradient-to-r from-violet-100 to-pink-100 px-4 py-1.5 text-xs font-bold text-violet-800 shadow-md">
-                      from ₹799
-                    </div>
-                  </div>
-                  <div className="mt-3 text-sm text-ink-700">
-                    A warm, small-group dinner with clear safety signals and a friendly
-                    vibe. (Replace with real photos later.)
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Badge tone="mint">🌱 Vegan</Badge>
-                    <Badge tone="violet">🎲 Board games</Badge>
-                    <Badge tone="sky">📍 Bengaluru</Badge>
-                  </div>
-                  <div className="mt-5 grid gap-3 rounded-2xl border-2 border-violet-200 bg-gradient-to-br from-violet-50/80 via-pink-50/80 to-orange-50/80 p-4 text-sm text-ink-700 sm:grid-cols-3 shadow-md">
-                    <div>
-                      <div className="text-xs font-medium uppercase tracking-wide text-ink-600">
-                        Seats
-                      </div>
-                      <div className="mt-1 font-medium text-ink-900">6 left</div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium uppercase tracking-wide text-ink-600">
-                        Host
-                      </div>
-                      <div className="mt-1 font-medium text-ink-900">Aanya</div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium uppercase tracking-wide text-ink-600">
-                        Verified
-                      </div>
-                      <div className="mt-1 font-medium text-ink-900">Yes</div>
-                    </div>
+              {loadingFeatured ? (
+                <div className="rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/50 to-violet-50/50 shadow-colorful backdrop-blur p-6">
+                  <div className="h-64 md:h-80 bg-gradient-to-br from-violet-100 via-pink-100 to-orange-100 rounded-2xl animate-pulse" />
+                  <div className="mt-4 space-y-3">
+                    <div className="h-4 bg-sand-200 rounded w-3/4 animate-pulse" />
+                    <div className="h-4 bg-sand-200 rounded w-1/2 animate-pulse" />
                   </div>
                 </div>
-              </div>
+              ) : featuredEvent ? (
+                <Link href={`/events/${featuredEvent.id}`} className="block group">
+                  <div className="mask-fade-b overflow-hidden rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/50 to-violet-50/50 shadow-colorful backdrop-blur transition-all duration-300 group-hover:scale-[1.02] group-hover:shadow-glow">
+                    <div className="relative h-64 bg-gradient-to-br from-violet-100 via-pink-100 via-orange-100 to-yellow-100 md:h-80">
+                      {featuredEvent.eventImages && featuredEvent.eventImages.length > 0 ? (
+                        <img
+                          src={`/api/upload/serve?path=${encodeURIComponent(featuredEvent.eventImages[0].filePath)}`}
+                          alt={featuredEvent.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <svg
+                          className="absolute inset-0 h-full w-full opacity-[0.35]"
+                          viewBox="0 0 800 500"
+                          preserveAspectRatio="none"
+                          aria-hidden="true"
+                        >
+                          <defs>
+                            <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+                              <stop offset="0" stopColor="#dbc7ad" stopOpacity="0.9" />
+                              <stop offset="1" stopColor="#ffffff" stopOpacity="0.1" />
+                            </linearGradient>
+                          </defs>
+                          <path
+                            d="M0,310 C160,250 250,410 390,360 C520,315 590,180 800,240 L800,500 L0,500 Z"
+                            fill="url(#g)"
+                          />
+                          <path
+                            d="M0,260 C120,220 260,300 360,280 C500,250 590,120 800,170"
+                            fill="none"
+                            stroke="#b78a59"
+                            strokeOpacity="0.35"
+                            strokeWidth="2"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="p-6">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="space-y-1 flex-1">
+                          <div className="text-xs font-medium uppercase tracking-wide text-ink-600">
+                            Featured Event
+                          </div>
+                          <div className="font-display text-xl text-ink-900 line-clamp-2">
+                            {featuredEvent.title}
+                          </div>
+                        </div>
+                        <div className="rounded-full border-2 border-violet-300 bg-gradient-to-r from-violet-100 to-pink-100 px-4 py-1.5 text-xs font-bold text-violet-800 shadow-md whitespace-nowrap">
+                          from ₹{Math.round(featuredEvent.priceFrom)}
+                        </div>
+                      </div>
+                      <div className="mt-3 text-sm text-ink-700 line-clamp-2">
+                        {mounted ? new Intl.DateTimeFormat("en-US", { 
+                          weekday: "long", 
+                          month: "long", 
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit"
+                        }).format(new Date(featuredEvent.startAt)) : ""}
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {featuredEvent.cuisines.slice(0, 2).map((cuisine, i) => (
+                          <Badge key={i} tone="mint">{cuisine}</Badge>
+                        ))}
+                        {featuredEvent.activities.slice(0, 1).map((activity, i) => (
+                          <Badge key={i} tone="violet">🎲 {activity}</Badge>
+                        ))}
+                        {featuredEvent.locality && (
+                          <Badge tone="sky">📍 {featuredEvent.locality}</Badge>
+                        )}
+                      </div>
+                      <div className="mt-5 grid gap-3 rounded-2xl border-2 border-violet-200 bg-gradient-to-br from-violet-50/80 via-pink-50/80 to-orange-50/80 p-4 text-sm text-ink-700 sm:grid-cols-3 shadow-md">
+                        <div>
+                          <div className="text-xs font-medium uppercase tracking-wide text-ink-600">
+                            Seats
+                          </div>
+                          <div className="mt-1 font-medium text-ink-900">{featuredEvent.seatsLeft} left</div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-medium uppercase tracking-wide text-ink-600">
+                            Host
+                          </div>
+                          <div className="mt-1 font-medium text-ink-900">{featuredEvent.hostName}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-medium uppercase tracking-wide text-ink-600">
+                            Verified
+                          </div>
+                          <div className="mt-1 font-medium text-ink-900">{featuredEvent.verified ? "Yes" : "Pending"}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ) : (
+                <div className="rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/50 to-violet-50/50 shadow-colorful backdrop-blur p-6">
+                  <div className="text-center py-12">
+                    <div className="text-sm text-ink-600">No upcoming events yet</div>
+                    <Button className="mt-4" asChild>
+                      <Link href="/host">Become the first host</Link>
+                    </Button>
+                  </div>
+                </div>
+              )}
               <div className="pointer-events-none absolute -bottom-6 -left-6 hidden h-28 w-28 rounded-full bg-violet-300/40 blur-2xl md:block animate-pulse" />
               <div className="pointer-events-none absolute -top-8 -right-8 hidden h-36 w-36 rounded-full bg-pink-300/40 blur-2xl md:block animate-pulse" style={{ animationDelay: "1s" }} />
               <div className="pointer-events-none absolute top-1/2 right-1/4 hidden h-24 w-24 rounded-full bg-orange-300/30 blur-2xl md:block animate-pulse" style={{ animationDelay: "2s" }} />
@@ -159,6 +304,40 @@ export default function HomePage() {
           </div>
         </Container>
       </section>
+
+      {/* Platform Statistics */}
+      {stats && (
+        <section className="mt-10 md:mt-14">
+          <Container>
+            <div className="grid gap-5 rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/40 to-violet-50/40 p-6 shadow-colorful backdrop-blur md:grid-cols-4">
+              <div className="rounded-2xl bg-white/60 p-4 text-center">
+                <div className="font-display text-4xl text-violet-600 font-bold">{stats.upcomingEvents}</div>
+                <div className="mt-1 text-sm text-ink-700 font-medium">
+                  Upcoming Events
+                </div>
+              </div>
+              <div className="rounded-2xl bg-white/60 p-4 text-center">
+                <div className="font-display text-4xl text-pink-600 font-bold">{stats.totalHosts}</div>
+                <div className="mt-1 text-sm text-ink-700 font-medium">
+                  Active Hosts
+                </div>
+              </div>
+              <div className="rounded-2xl bg-white/60 p-4 text-center">
+                <div className="font-display text-4xl text-orange-600 font-bold">{stats.totalEvents}</div>
+                <div className="mt-1 text-sm text-ink-700 font-medium">
+                  Total Events
+                </div>
+              </div>
+              <div className="rounded-2xl bg-white/60 p-4 text-center">
+                <div className="font-display text-4xl text-sky-600 font-bold">✓</div>
+                <div className="mt-1 text-sm text-ink-700 font-medium">
+                  ID Verified
+                </div>
+              </div>
+            </div>
+          </Container>
+        </section>
+      )}
 
       <section className="mt-10 md:mt-14">
         <Container>
@@ -191,6 +370,12 @@ export default function HomePage() {
         </Container>
       </section>
 
+      {/* Trending Events Section */}
+      {mounted && <TrendingEvents />}
+
+      {/* Testimonials Section */}
+      {mounted && <TestimonialsSection />}
+
       <section className="mt-14 md:mt-20">
         <Container>
           <div className="flex items-end justify-between gap-4">
@@ -200,7 +385,7 @@ export default function HomePage() {
                 Find your next table
               </h2>
               <p className="mt-2 text-sm text-ink-700">
-                Filter events by location to find dining experiences near you.
+                Filter events by location and categories to find dining experiences near you.
               </p>
             </div>
             <Button variant="ghost" asChild>
@@ -208,8 +393,68 @@ export default function HomePage() {
             </Button>
           </div>
 
+          {/* Category Filters */}
+          {mounted && (
+            <div className="mt-6 rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/40 to-violet-50/40 p-6 shadow-colorful backdrop-blur">
+              <CategoryFilters onFilterChange={(filters) => setCategoryFilters(filters)} />
+            </div>
+          )}
+
+          {/* Quick Filter Suggestions */}
+          <div className="mt-6 flex flex-wrap gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setCityFilter("Bengaluru");
+                setLocalityFilter("");
+                setStateFilter("");
+              }}
+              className={cityFilter === "Bengaluru" ? "bg-violet-100 text-violet-700" : ""}
+            >
+              📍 Bengaluru
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setCityFilter("Mumbai");
+                setLocalityFilter("");
+                setStateFilter("");
+              }}
+              className={cityFilter === "Mumbai" ? "bg-violet-100 text-violet-700" : ""}
+            >
+              📍 Mumbai
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setCityFilter("Delhi");
+                setLocalityFilter("");
+                setStateFilter("");
+              }}
+              className={cityFilter === "Delhi" ? "bg-violet-100 text-violet-700" : ""}
+            >
+              📍 Delhi
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setCityFilter("");
+                setLocalityFilter("");
+                setStateFilter("");
+                setCategoryFilters({});
+              }}
+              className="text-ink-600"
+            >
+              Clear all filters
+            </Button>
+          </div>
+
           {/* Location Filters */}
-          <div className="mt-6 grid gap-4 rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/40 to-violet-50/40 p-5 shadow-colorful backdrop-blur sm:grid-cols-3">
+          <div className="mt-4 grid gap-4 rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/40 to-violet-50/40 p-5 shadow-colorful backdrop-blur sm:grid-cols-3">
             <Input
               label="City"
               placeholder="e.g., Bengaluru"
@@ -235,6 +480,9 @@ export default function HomePage() {
           </div>
         </Container>
       </section>
+
+      {/* Event Calendar - Only for logged-in users */}
+      {mounted && <EventCalendar />}
 
       <section className="mt-14 md:mt-20">
         <Container>

@@ -14,6 +14,8 @@ import { BookingsTab } from "@/components/admin/bookings-tab";
 import { PaymentsTab } from "@/components/admin/payments-tab";
 import { ReviewsTab } from "@/components/admin/reviews-tab";
 import { VenuesTab } from "@/components/admin/venues-tab";
+import { WalletsTab } from "@/components/admin/wallets-tab";
+import { DisputesTab } from "@/components/admin/disputes-tab";
 import { SettingsTab } from "@/components/admin/settings-tab";
 import { AdminsTab } from "@/components/admin/admins-tab";
 import { AuditLogsTab } from "@/components/admin/audit-logs-tab";
@@ -76,6 +78,8 @@ type Tab =
   | "payments"
   | "reviews"
   | "venues"
+  | "wallets"
+  | "disputes"
   | "settings"
   | "admins"
   | "audit-logs";
@@ -84,10 +88,10 @@ type Tab =
 function hasPermission(role: string, permission: string): boolean {
   if (role === "SUPER_ADMIN") return true;
   if (role === "MODERATOR") {
-    return ["dashboard", "users", "events", "bookings", "payments", "reviews", "venues", "audit-logs"].includes(permission);
+    return ["dashboard", "users", "events", "bookings", "payments", "reviews", "venues", "wallets", "disputes", "audit-logs"].includes(permission);
   }
   if (role === "ANALYST") {
-    return ["dashboard", "events", "revenue", "payments", "audit-logs"].includes(permission);
+    return ["dashboard", "events", "revenue", "payments", "wallets", "audit-logs"].includes(permission);
   }
   return false;
 }
@@ -119,25 +123,38 @@ export default function AdminPage() {
       return;
     }
 
-    const res = await apiFetch<{
-      id: string;
-      username: string;
-      role: string;
-      fullName: string;
-      email: string;
-    }>("/api/admin/auth/me", {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    if (res.ok) {
-      setAdminInfo({
-        username: res.data.username,
-        role: res.data.role,
-        fullName: res.data.fullName
+    try {
+      const res = await apiFetch<{
+        id: string;
+        username: string;
+        role: string;
+        fullName: string;
+        email: string;
+      }>("/api/admin/auth/me", {
+        headers: { Authorization: `Bearer ${token}` }
       });
-    } else if (!res.ok) {
-      console.error("Auth check failed:", res.error);
-      // Clear invalid token
+
+      if (res.ok && res.data) {
+        setAdminInfo({
+          username: res.data.username,
+          role: res.data.role,
+          fullName: res.data.fullName
+        });
+      } else if (!res.ok) {
+        // Only log if it's not a simple "unauthorized" case
+        if (res.error && !res.error.toLowerCase().includes("unauthorized") && !res.error.toLowerCase().includes("admin access required")) {
+          console.error("Auth check failed:", res.error);
+        }
+        // Clear invalid token
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem("dah_access_token");
+          window.localStorage.removeItem("dah_role");
+        }
+        router.push("/admin/login");
+      }
+    } catch (err) {
+      // Handle network errors or other exceptions
+      console.error("Auth check error:", err);
       if (typeof window !== "undefined") {
         window.localStorage.removeItem("dah_access_token");
         window.localStorage.removeItem("dah_role");
@@ -296,6 +313,30 @@ export default function AdminPage() {
               Venues
             </button>
           )}
+          {hasPermission(adminInfo?.role || "", "wallets") && (
+            <button
+              onClick={() => setActiveTab("wallets")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "wallets"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Wallets & Payouts
+            </button>
+          )}
+          {hasPermission(adminInfo?.role || "", "disputes") && (
+            <button
+              onClick={() => setActiveTab("disputes")}
+              className={`px-4 py-2 text-sm font-medium transition whitespace-nowrap ${
+                activeTab === "disputes"
+                  ? "border-b-2 border-ink-900 text-ink-900"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Disputes
+            </button>
+          )}
           {hasPermission(adminInfo?.role || "", "settings") && (
             <button
               onClick={() => setActiveTab("settings")}
@@ -344,6 +385,8 @@ export default function AdminPage() {
           {activeTab === "payments" && <PaymentsTab />}
           {activeTab === "reviews" && <ReviewsTab />}
           {activeTab === "venues" && <VenuesTab />}
+          {activeTab === "wallets" && <WalletsTab />}
+          {activeTab === "disputes" && <DisputesTab />}
           {activeTab === "settings" && <SettingsTab />}
           {activeTab === "admins" && <AdminsTab />}
           {activeTab === "audit-logs" && <AuditLogsTab />}

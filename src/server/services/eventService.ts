@@ -22,6 +22,7 @@ export type PublicEventListItem = {
   hostUserId: string;
   hostRating: number;
   verified: boolean;
+  governmentIdPath?: string;
   foodTags: string[];
   cuisines: string[];
   activities: string[];
@@ -228,11 +229,33 @@ export async function listPublicEvents(filters?: {
   }
 
   const hostIds = Array.from(new Set(filteredSlots.map((s) => String((s as any).hostUserId))));
+  
+  // Fetch host profiles and user status
   const hostProfiles = (await HostProfile.find({ userId: { $in: hostIds } })
-    .select({ userId: 1, name: 1, ratingAvg: 1, ratingCount: 1 })
-    .lean()) as unknown as Array<{ userId: unknown; name?: string; ratingAvg?: number }>;
-  const hostByUserId = new Map<string, { name?: string; ratingAvg?: number }>();
-  for (const h of hostProfiles) hostByUserId.set(String(h.userId), h);
+    .select({ userId: 1, name: 1, ratingAvg: 1, ratingCount: 1, isIdentityVerified: 1, governmentIdPath: 1 })
+    .lean()) as unknown as Array<{ userId: unknown; name?: string; ratingAvg?: number; isIdentityVerified?: boolean; governmentIdPath?: string }>;
+  
+  // Fetch user statuses to filter out suspended hosts
+  const users = await User.find({ _id: { $in: hostIds } })
+    .select({ _id: 1, status: 1 })
+    .lean();
+  const userStatusByUserId = new Map<string, string>();
+  for (const u of users) {
+    userStatusByUserId.set(String((u as any)._id), (u as any).status);
+  }
+  
+  const hostByUserId = new Map<string, { name?: string; ratingAvg?: number; isIdentityVerified?: boolean; governmentIdPath?: string; status?: string }>();
+  for (const h of hostProfiles) {
+    const userId = String(h.userId);
+    const status = userStatusByUserId.get(userId);
+    hostByUserId.set(userId, { ...h, status });
+  }
+  
+  // Filter out events from suspended hosts
+  filteredSlots = filteredSlots.filter((s) => {
+    const host = hostByUserId.get(String((s as any).hostUserId));
+    return host?.status !== "SUSPENDED";
+  });
 
   // Filter by rating if specified
   if (filters?.minRating !== undefined) {
@@ -260,7 +283,8 @@ export async function listPublicEvents(filters?: {
       hostName: host?.name ?? "Host",
       hostUserId: String((s as any).hostUserId),
       hostRating: host?.ratingAvg ?? 0,
-      verified: true,
+      verified: host?.isIdentityVerified ?? false,
+      governmentIdPath: host?.governmentIdPath ?? "",
       foodTags: (s as any).foodTags ?? [],
       cuisines: (s as any).cuisines ?? venue?.foodCategories ?? [],
       foodType: (s as any).foodType ?? "",
@@ -274,13 +298,24 @@ export async function listPublicEvents(filters?: {
 export async function getPublicEventById(eventId: string) {
   await connectMongo();
   const slot = await EventSlot.findById(eventId)
-    .populate({ path: "venueId", select: "name address locality foodCategories gamesAvailable images" })
+    .populate({ path: "venueId", select: "name address locality city state country postalCode foodCategories gamesAvailable images latitude longitude" })
     .lean();
   if (!slot) return null;
 
   const host = (await HostProfile.findOne({ userId: (slot as any).hostUserId })
-    .select({ name: 1, ratingAvg: 1 })
-    .lean()) as { name?: string; ratingAvg?: number } | null;
+    .select({ name: 1, ratingAvg: 1, isIdentityVerified: 1, governmentIdPath: 1 })
+    .lean()) as { name?: string; ratingAvg?: number; isIdentityVerified?: boolean; governmentIdPath?: string } | null;
+  
+  // Check if host is suspended
+  const hostUser = await User.findById((slot as any).hostUserId)
+    .select({ status: 1 })
+    .lean();
+  const hostStatus = (hostUser as any)?.status || "ACTIVE";
+  
+  // If host is suspended, return null to prevent event access
+  if (hostStatus === "SUSPENDED") {
+    return null;
+  }
 
   const venue = (slot as any).venueId as any;
   return {
@@ -293,8 +328,14 @@ export async function getPublicEventById(eventId: string) {
     maxGuests: (slot as any).maxGuests ?? 0,
     priceFrom: Math.round(((slot as any).basePricePerGuest ?? 0) / 100),
     locality: venue?.locality ?? "",
+    city: venue?.city ?? "",
+    state: venue?.state ?? "",
+    country: venue?.country ?? "",
+    postalCode: venue?.postalCode ?? "",
     venueName: venue?.name ?? "",
     venueAddress: venue?.address ?? "",
+    venueLatitude: venue?.latitude ?? null,
+    venueLongitude: venue?.longitude ?? null,
     foodTags: (slot as any).foodTags ?? [],
     cuisines: (slot as any).cuisines ?? venue?.foodCategories ?? [],
     foodType: (slot as any).foodType ?? "",
@@ -302,6 +343,8 @@ export async function getPublicEventById(eventId: string) {
     hostName: host?.name ?? "Host",
     hostRating: host?.ratingAvg ?? 0,
     hostUserId: String((slot as any).hostUserId ?? ""),
+    verified: host?.isIdentityVerified ?? false,
+    governmentIdPath: host?.governmentIdPath ?? "",
     eventImages: (slot as any).images ?? [],
     eventVideos: (slot as any).videos ?? [],
     venueImages: venue?.images ?? []

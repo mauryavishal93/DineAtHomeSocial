@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
               venueName: (event as any).venueId?.name,
               venueAddress: (event as any).venueId?.address,
               hostName: (event as any).hostUserId?.name,
-              priceFrom: (event as any).basePricePerGuest || 0,
+              priceFrom: Math.round(((event as any).basePricePerGuest || 0) / 100), // Convert paise to rupees
               seatsLeft: (event as any).seatsRemaining || 0
             },
             createdAt: fav.createdAt

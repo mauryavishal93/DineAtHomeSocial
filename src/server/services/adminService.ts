@@ -1257,6 +1257,7 @@ export interface UserDetailData {
     totalGuestsServed: number;
     totalRevenue: number;
     isIdentityVerified: boolean;
+    governmentIdPath?: string;
     isCulinaryCertified: boolean;
     verificationDate: Date | null;
   };
@@ -1394,6 +1395,7 @@ export async function getUserDetail(userId: string): Promise<UserDetailData> {
           totalGuestsServed: (hostProfile as any).totalGuestsServed || 0,
           totalRevenue: (hostProfile as any).totalRevenue || 0,
           isIdentityVerified: (hostProfile as any).isIdentityVerified || false,
+          governmentIdPath: (hostProfile as any).governmentIdPath || "",
           isCulinaryCertified: (hostProfile as any).isCulinaryCertified || false,
           verificationDate: (hostProfile as any).verificationDate || null
         }

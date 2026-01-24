@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
+import { VerificationBadge } from "@/components/events/verification-badge";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,17 @@ import { CheckInInterface } from "@/components/check-in/check-in-interface";
 import { ReminderButton } from "@/components/events/reminder-button";
 import { RefundModal } from "@/components/modals/refund-modal";
 import { EventPass } from "@/components/events/event-pass";
+import dynamic from "next/dynamic";
+
+// Dynamically import AddressMap to avoid SSR issues with Leaflet
+const AddressMap = dynamic(() => import("@/components/map/address-map").then((mod) => mod.AddressMap), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-64 rounded-lg border border-sand-200 bg-sand-100 flex items-center justify-center text-sm text-ink-600">
+      Loading map...
+    </div>
+  )
+});
 
 type EventDetail = {
   id: string;
@@ -27,8 +39,14 @@ type EventDetail = {
   seatsLeft: number;
   priceFrom: number;
   locality: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
   venueName: string;
   venueAddress: string;
+  venueLatitude?: number | null;
+  venueLongitude?: number | null;
   foodTags: string[];
   cuisines: string[];
   foodType: string;
@@ -36,6 +54,9 @@ type EventDetail = {
   hostName: string;
   hostRating: number;
   hostUserId: string;
+  verified: boolean;
+  governmentIdPath?: string;
+  hostStatus?: string;
   eventImages?: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>;
   eventVideos?: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>;
   venueImages?: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>;
@@ -43,12 +64,14 @@ type EventDetail = {
 
 function formatDateLabel(iso: string) {
   const d = new Date(iso);
-  return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "2-digit", month: "short" }).format(d);
+  // Use 'en-US' locale to ensure consistent formatting between server and client
+  return new Intl.DateTimeFormat("en-US", { weekday: "short", day: "2-digit", month: "short" }).format(d);
 }
 function formatTimeLabel(startIso: string, endIso: string) {
   const s = new Date(startIso);
   const e = new Date(endIso);
-  const tf = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+  // Use 'en-US' locale to ensure consistent formatting between server and client
+  const tf = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
   return `${tf.format(s)} – ${tf.format(e)}`;
 }
 
@@ -57,12 +80,17 @@ export default function EventDetailPage({
 }: {
   params: Promise<{ eventId: string }>;
 }) {
+  const [mounted, setMounted] = useState(false);
   const [ev, setEv] = useState<EventDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [bookingSeats, setBookingSeats] = useState(1);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [bookingInProgress, setBookingInProgress] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   // Current user details (fetched automatically)
   const [currentUser, setCurrentUser] = useState<{
@@ -121,6 +149,10 @@ export default function EventDetailPage({
   const maxSeatsAllowed = 2;
   const alreadyBookedSeats = existingBooking?.seats || 0;
   const remainingSeatsAllowed = maxSeatsAllowed - alreadyBookedSeats;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -531,6 +563,11 @@ export default function EventDetailPage({
                 <div className="flex flex-wrap gap-2">
                   <Badge tone="success">Hosted</Badge>
                   <Badge tone="ink">{ev.locality}</Badge>
+                  {ev.hostStatus === "SUSPENDED" && (
+                    <Badge tone="warning" className="bg-red-100 text-red-800 border-red-300">
+                      ⚠️ Host Suspended
+                    </Badge>
+                  )}
                 </div>
                 <div className="mt-4 flex items-start justify-between gap-4">
                   <div className="flex-1">
@@ -548,7 +585,13 @@ export default function EventDetailPage({
                       When
                     </div>
                     <div className="mt-1">
-                      {formatDateLabel(ev.startAt)} • {formatTimeLabel(ev.startAt, ev.endAt)}
+                      {mounted && ev ? (
+                        <>
+                          {formatDateLabel(ev.startAt)} • {formatTimeLabel(ev.startAt, ev.endAt)}
+                        </>
+                      ) : (
+                        <span className="invisible">Loading...</span>
+                      )}
                     </div>
                   </div>
                   <div>
@@ -794,6 +837,41 @@ export default function EventDetailPage({
               </div>
             )}
 
+            {/* Venue Address and Location */}
+            {ev.venueAddress && (
+              <div className="rounded-3xl border border-sand-200 bg-white/60 shadow-card backdrop-blur p-6">
+                <h3 className="mb-4 text-lg font-semibold text-ink-900">Venue Location</h3>
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-sm font-medium text-ink-700 mb-1">Address</div>
+                    <div className="text-sm text-ink-900">{ev.venueAddress}</div>
+                    {(ev.locality || ev.city || ev.state) && (
+                      <div className="text-sm text-ink-600 mt-1">
+                        {[ev.locality, ev.city, ev.state].filter(Boolean).join(", ")}
+                        {ev.postalCode && ` - ${ev.postalCode}`}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Map */}
+                  {ev.venueLatitude !== null && ev.venueLatitude !== undefined && 
+                   ev.venueLongitude !== null && ev.venueLongitude !== undefined && (
+                    <div className="mt-4">
+                      <AddressMap
+                        address={ev.venueAddress}
+                        latitude={ev.venueLatitude}
+                        longitude={ev.venueLongitude}
+                        editable={false}
+                        onLocationSelect={() => {
+                          // No-op in view mode
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Venue Images */}
             {ev.venueImages && ev.venueImages.length > 0 && (
               <div className="rounded-3xl border border-sand-200 bg-white/60 shadow-card backdrop-blur p-6">
@@ -837,14 +915,21 @@ export default function EventDetailPage({
 
             <div className="rounded-3xl border border-sand-200 bg-white/50 p-6 shadow-soft backdrop-blur">
               <div className="font-medium text-ink-900">About the host</div>
-              <div className="mt-2 text-sm text-ink-700">
+              <div className="mt-3 flex items-center gap-3 flex-wrap">
                 <Link
                   href={`/hosts/${ev.hostUserId}`}
                   className="font-medium text-ink-900 hover:text-ink-600 hover:underline"
                 >
                   {ev.hostName}
-                </Link>{" "}
-                • {ev.hostRating.toFixed(1)} rating
+                </Link>
+                <span className="text-ink-600">•</span>
+                <span className="text-sm text-ink-700">{ev.hostRating.toFixed(1)} ⭐ rating</span>
+              </div>
+              <div className="mt-3">
+                <VerificationBadge 
+                  isIdentityVerified={ev.verified} 
+                  governmentIdPath={ev.governmentIdPath} 
+                />
               </div>
               <p className="mt-3 text-sm text-ink-700">
                 Host bios, house rules, venue photos, and verification details will
@@ -934,7 +1019,7 @@ export default function EventDetailPage({
           <aside className="h-fit rounded-3xl border border-sand-200 bg-white/70 p-6 shadow-card backdrop-blur">
             <div className="text-sm font-medium text-ink-700">From</div>
             <div className="mt-1 font-display text-3xl text-ink-900">
-              ₹{ev.priceFrom}
+              ₹{Math.round(ev.priceFrom)}
               <span className="ml-2 align-middle text-sm font-sans text-ink-600">
                 / guest
               </span>
@@ -961,6 +1046,32 @@ export default function EventDetailPage({
                 {/* Existing Booking (if any) */}
                 {existingBooking && (
                   <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50/50 p-4">
+                    {ev.hostStatus === "SUSPENDED" && (
+                      <div className="mb-4 rounded-lg border-2 border-red-300 bg-red-50 p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0">
+                            <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-red-900 mb-1">Host Suspended</h4>
+                            <p className="text-sm text-red-800 mb-3">
+                              The host for this event has been suspended. Your booking may be affected.
+                            </p>
+                            <a
+                              href="/support"
+                              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                              </svg>
+                              Contact Support for Refund
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-lg">✓</span>
                       <div className="text-sm font-medium text-amber-900">
@@ -1068,7 +1179,7 @@ export default function EventDetailPage({
                 )}
 
                 {/* Number of Seats Selector - Only if can still book */}
-                {remainingSeatsAllowed > 0 && (
+                {remainingSeatsAllowed > 0 && ev.hostStatus !== "SUSPENDED" && (
                   <div className="mt-5">
                     <label className="block text-sm font-medium text-ink-900 mb-2">
                       {existingBooking 
@@ -1224,7 +1335,7 @@ export default function EventDetailPage({
                     <div className="mt-5 space-y-2 text-sm text-ink-700">
                       <div className="flex items-center justify-between">
                         <span>Price per seat</span>
-                        <span className="font-medium text-ink-900">₹{ev.priceFrom}</span>
+                        <span className="font-medium text-ink-900">₹{Math.round(ev.priceFrom)}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span>{existingBooking ? 'Additional guests' : 'Seats'}</span>
@@ -1239,7 +1350,7 @@ export default function EventDetailPage({
                       <div className="flex items-center justify-between border-t border-sand-200 pt-3">
                         <span>Total {existingBooking ? '(New guests)' : ''}</span>
                         <span className="font-medium text-ink-900">
-                          ₹{ev.priceFrom * bookingSeats}
+                          ₹{Math.round(ev.priceFrom * bookingSeats)}
                         </span>
                       </div>
                     </div>
@@ -1252,6 +1363,7 @@ export default function EventDetailPage({
                         onClick={handleBook}
                         disabled={
                           bookingInProgress || 
+                          ev.hostStatus === "SUSPENDED" ||
                           ev.seatsLeft < 1 ||
                           !currentUser ||
                           remainingSeatsAllowed === 0 ||
@@ -1264,13 +1376,17 @@ export default function EventDetailPage({
                         {bookingInProgress ? "Booking..." : existingBooking ? "Add Guests to Booking" : "Book"}
                       </Button>
                       
-                      {!existingBooking && bookingSeats > 1 && additionalGuests.length < bookingSeats - 1 && (
+                      {ev.hostStatus === "SUSPENDED" && (
+                        <p className="text-sm text-red-600 mt-2 font-medium text-center">
+                          ⚠️ Booking is disabled because the host has been suspended.
+                        </p>
+                      )}
+                      {ev.hostStatus !== "SUSPENDED" && !existingBooking && bookingSeats > 1 && additionalGuests.length < bookingSeats - 1 && (
                         <p className="text-center text-xs text-ink-600">
                           Add all guest details to proceed
                         </p>
                       )}
-                      
-                      {existingBooking && additionalGuests.length < bookingSeats && (
+                      {ev.hostStatus !== "SUSPENDED" && existingBooking && additionalGuests.length < bookingSeats && (
                         <p className="text-center text-xs text-ink-600">
                           Add details for all {bookingSeats} guest{bookingSeats > 1 ? 's' : ''} to proceed
                         </p>
@@ -1326,7 +1442,7 @@ export default function EventDetailPage({
                       </div>
                       <div className="flex items-center justify-between border-t border-sand-200 pt-3">
                         <span>Total</span>
-                        <span className="font-medium text-ink-900">₹{ev.priceFrom}</span>
+                        <span className="font-medium text-ink-900">₹{Math.round(ev.priceFrom)}</span>
                       </div>
                     </div>
 

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken } from "@/lib/session";
+import { formatCurrency } from "@/lib/currency";
 
 function StatCard({
   title,
@@ -30,10 +31,6 @@ function StatCard({
       <div className="mt-2 text-3xl font-bold text-ink-900">{value}</div>
     </div>
   );
-}
-
-function formatCurrency(paise: number): string {
-  return `₹${(paise / 100).toFixed(2)}`;
 }
 
 type RevenueItem = {
@@ -105,15 +102,15 @@ export function RevenueTab() {
         <div className="grid gap-4 md:grid-cols-3">
           <StatCard
             title="Total Registration Fees"
-            value={formatCurrency(revenueData.summary.totalRegistrationFees)}
+            value={formatCurrency(revenueData.summary.totalRegistrationFees, true)}
           />
           <StatCard
             title="Total Commissions"
-            value={formatCurrency(revenueData.summary.totalCommissions)}
+            value={formatCurrency(revenueData.summary.totalCommissions, true)}
           />
           <StatCard
             title="Total Revenue"
-            value={formatCurrency(revenueData.summary.total)}
+            value={formatCurrency(revenueData.summary.total, true)}
             tone="success"
           />
         </div>
@@ -131,9 +128,7 @@ export function RevenueTab() {
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Type</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Amount</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Host Name</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Host ID</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Event Name</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Event ID</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Event Date</th>
               </tr>
             </thead>
@@ -153,7 +148,7 @@ export function RevenueTab() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm font-medium text-ink-900">
-                    {formatCurrency(item.amount)}
+                    {formatCurrency(item.amount, true)}
                   </td>
                   <td className="px-4 py-3">
                     {item.hostId && item.hostName ? (
@@ -167,14 +162,8 @@ export function RevenueTab() {
                       <span className="text-sm text-ink-700">N/A</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-ink-600 font-mono">
-                    {item.hostId ? `${item.hostId.slice(0, 8)}...` : "N/A"}
-                  </td>
                   <td className="px-4 py-3 text-sm text-ink-700">
                     {item.eventName || "N/A"}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-ink-600 font-mono">
-                    {item.eventId ? `${item.eventId.slice(0, 8)}...` : "N/A"}
                   </td>
                   <td className="px-4 py-3 text-sm text-ink-600">
                     {item.eventDate

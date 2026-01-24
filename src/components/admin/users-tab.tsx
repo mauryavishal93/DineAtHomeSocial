@@ -123,7 +123,6 @@ export function UsersTab() {
           <table className="w-full">
             <thead className="bg-sand-50">
               <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">User ID</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">User Name</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Email</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Role</th>
@@ -139,7 +138,6 @@ export function UsersTab() {
                   : "N/A";
                 return (
                 <tr key={user._id}>
-                  <td className="px-4 py-3 text-sm text-ink-600 font-mono">{user._id.slice(0, 8)}...</td>
                   <td className="px-4 py-3">
                     <a
                       href={`/admin/users/${user._id}`}
@@ -169,7 +167,7 @@ export function UsersTab() {
                     {new Date(user.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       {user.status === "PENDING" && (
                         <Button
                           size="sm"
@@ -177,6 +175,15 @@ export function UsersTab() {
                           onClick={() => verifyUser(user._id)}
                         >
                           Verify
+                        </Button>
+                      )}
+                      {user.status !== "VERIFIED" && user.status !== "PENDING" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => updateStatus(user._id, "VERIFIED")}
+                        >
+                          Mark Verified
                         </Button>
                       )}
                       {user.status !== "SUSPENDED" && (

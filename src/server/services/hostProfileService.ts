@@ -35,6 +35,8 @@ export async function getHostProfile(userId: string) {
     bio: (profile as any).bio ?? "",
     interests: (profile as any).interests ?? [],
     name: (profile as any).name ?? "",
+    isIdentityVerified: (profile as any).isIdentityVerified ?? false,
+    governmentIdPath: (profile as any).governmentIdPath ?? "",
 
     venueId: venue?._id ? String(venue._id) : null,
     venueName: venue?.name ?? (profile as any).venueName ?? "",

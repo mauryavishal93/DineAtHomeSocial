@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken } from "@/lib/session";
+import { formatCurrency } from "@/lib/currency";
 
 export function BookingsTab() {
   const [bookings, setBookings] = useState<any[]>([]);
@@ -62,9 +63,7 @@ export function BookingsTab() {
     }
   }
 
-  function formatCurrency(paise: number): string {
-    return `₹${(paise / 100).toFixed(2)}`;
-  }
+  // Using formatCurrency from lib/currency
 
   return (
     <div className="space-y-4">
@@ -141,7 +140,7 @@ export function BookingsTab() {
                     <div className="text-xs text-ink-600">{booking.guestEmail}</div>
                   </td>
                   <td className="px-4 py-3 text-sm text-ink-900">{booking.seats}</td>
-                  <td className="px-4 py-3 text-sm text-ink-900">{formatCurrency(booking.amountTotal)}</td>
+                  <td className="px-4 py-3 text-sm text-ink-900">{formatCurrency(booking.amountTotal, true)}</td>
                   <td className="px-4 py-3">
                     <Badge
                       tone={
