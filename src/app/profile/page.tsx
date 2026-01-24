@@ -12,6 +12,17 @@ import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import dynamic from "next/dynamic";
+
+// Dynamically import AddressMap to avoid SSR issues with Leaflet
+const AddressMap = dynamic(() => import("@/components/map/address-map").then((mod) => mod.AddressMap), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-64 rounded-lg border border-sand-200 bg-sand-100 flex items-center justify-center text-sm text-ink-600">
+      Loading map...
+    </div>
+  )
+});
 
 import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
@@ -92,6 +103,9 @@ export default function ProfilePage() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [venueImages, setVenueImages] = useState<Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>>([]);
   const [uploadingVenueImages, setUploadingVenueImages] = useState(false);
+  const [governmentIdPath, setGovernmentIdPath] = useState<string>("");
+  const [isIdentityVerified, setIsIdentityVerified] = useState<boolean>(false);
+  const [uploadingGovernmentId, setUploadingGovernmentId] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [locality, setLocality] = useState<string>("");
   const [city, setCity] = useState<string>("");
@@ -99,6 +113,8 @@ export default function ProfilePage() {
   const [country, setCountry] = useState<string>("");
   const [postalCode, setPostalCode] = useState<string>("");
   const [isAutoFilling, setIsAutoFilling] = useState(false);
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
   const [guestOverview, setGuestOverview] = useState<{
     attendedEvents: Array<{
       bookingId: string;
@@ -234,6 +250,8 @@ export default function ProfilePage() {
           latitude?: number | null;
           longitude?: number | null;
           venueImages?: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>;
+          isIdentityVerified?: boolean;
+          governmentIdPath?: string;
         }>("/api/host/profile", {
           method: "GET",
           headers: { authorization: `Bearer ${token}` }
@@ -264,7 +282,11 @@ export default function ProfilePage() {
         setState(res.data.state ?? "");
         setCountry(res.data.country ?? "");
         setPostalCode(res.data.postalCode ?? "");
+        setLatitude(res.data.latitude ?? null);
+        setLongitude(res.data.longitude ?? null);
         setVenueImages(res.data.venueImages ?? []);
+        setGovernmentIdPath(res.data.governmentIdPath ?? "");
+        setIsIdentityVerified(res.data.isIdentityVerified ?? false);
         setGuestOverview(null);
         setLoading(false);
         return;
@@ -395,7 +417,9 @@ export default function ProfilePage() {
           city: city || "",
           state: state || "",
           country: country || "",
-          postalCode: postalCode || ""
+          postalCode: postalCode || "",
+          latitude: latitude,
+          longitude: longitude
         };
         const res = await apiFetch("/api/host/profile", {
           method: "PUT",
@@ -409,7 +433,7 @@ export default function ProfilePage() {
         setSavedMsg("Profile saved.");
         setIsEditing(false);
       }),
-    [hostForm, router, token, locality, city, state, country, postalCode]
+    [hostForm, router, token, locality, city, state, country, postalCode, latitude, longitude]
   );
 
   // Show loading state during SSR or before mount
@@ -680,6 +704,38 @@ export default function ProfilePage() {
                   onChange={(e) => setPostalCode(e.target.value)}
                 />
 
+                {/* Map Location Section */}
+                <div>
+                  <label className="block text-sm font-medium text-ink-700 mb-2">
+                    Map Location
+                  </label>
+                  <AddressMap
+                    address={hostForm.watch("venueAddress") || ""}
+                    latitude={latitude}
+                    longitude={longitude}
+                    editable={isEditing}
+                    onLocationSelect={(address, lat, lng, addressComponents) => {
+                      setLatitude(lat);
+                      setLongitude(lng);
+                      // Update address if geocoded address is different
+                      if (address && address !== hostForm.watch("venueAddress")) {
+                        hostForm.setValue("venueAddress", address);
+                      }
+                      // Update address components if provided
+                      if (addressComponents) {
+                        if (addressComponents.locality) setLocality(addressComponents.locality);
+                        if (addressComponents.city) setCity(addressComponents.city);
+                        if (addressComponents.state) setState(addressComponents.state);
+                        if (addressComponents.country) setCountry(addressComponents.country);
+                        if (addressComponents.postalCode) setPostalCode(addressComponents.postalCode);
+                      }
+                    }}
+                  />
+                  <p className="mt-1 text-xs text-ink-600">
+                    Enter your address above and click "Get Location" to select the location on the map. The map will automatically update when you enter an address.
+                  </p>
+                </div>
+
                 <Input
                   label="Cuisine served"
                   placeholder="Comma separated (e.g. North Indian, Vegan)"
@@ -777,6 +833,22 @@ export default function ProfilePage() {
                     )}
                   </>
                 )}
+
+                {/* Map Location in View Mode */}
+                {(latitude !== null && longitude !== null) || hostForm.watch("venueAddress") ? (
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-ink-600 mb-2">Map Location</div>
+                    <AddressMap
+                      address={hostForm.watch("venueAddress") || ""}
+                      latitude={latitude}
+                      longitude={longitude}
+                      editable={false}
+                      onLocationSelect={() => {
+                        // No-op in view mode
+                      }}
+                    />
+                  </div>
+                ) : null}
                 <div>
                   <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Cuisines</div>
                   <div className="mt-1 flex flex-wrap gap-2">
@@ -920,6 +992,163 @@ export default function ProfilePage() {
                       </button>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* Government ID Verification Section */}
+            <div className="mt-8 space-y-4 border-t border-sand-200 pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-ink-900">Government ID Verification</h3>
+                  <p className="mt-1 text-sm text-ink-600">
+                    Upload a government-issued ID (Aadhaar, PAN, Passport, or Driver's License) for verification
+                  </p>
+                </div>
+                {isIdentityVerified ? (
+                  <Badge tone="success">✓ Verified</Badge>
+                ) : governmentIdPath ? (
+                  <Badge tone="warning">⏳ Pending Review</Badge>
+                ) : (
+                  <Badge tone="ink">Not Uploaded</Badge>
+                )}
+              </div>
+
+              {governmentIdPath ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-4 rounded-2xl border-2 border-violet-200 bg-violet-50/50">
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-ink-900">ID Document Uploaded</div>
+                      <div className="text-xs text-ink-600 mt-1">
+                        {isIdentityVerified 
+                          ? "Your identity has been verified by admin"
+                          : "Your document is pending admin review"}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <a
+                        href={`/api/upload/serve?path=${encodeURIComponent(governmentIdPath)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-violet-600 hover:text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        View Document
+                      </a>
+                      <a
+                        href={`/api/upload/serve?path=${encodeURIComponent(governmentIdPath)}&download=true`}
+                        download
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-violet-600 hover:text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Download Document
+                      </a>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-ink-900 mb-2">
+                      Replace Document
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file || !token) return;
+
+                        setUploadingGovernmentId(true);
+                        setServerError(null);
+
+                        try {
+                          const formData = new FormData();
+                          formData.append("file", file);
+
+                          const res = await fetch("/api/upload/government-id", {
+                            method: "POST",
+                            headers: { authorization: `Bearer ${token}` },
+                            body: formData
+                          });
+
+                          const json = await res.json();
+
+                          if (!res.ok) {
+                            setServerError(json.error || "Failed to upload document");
+                            return;
+                          }
+
+                          setGovernmentIdPath(json.filePath);
+                          setIsIdentityVerified(false);
+                          setSavedMsg("Government ID uploaded successfully. Waiting for admin verification.");
+                        } catch (err) {
+                          setServerError("Failed to upload document");
+                        } finally {
+                          setUploadingGovernmentId(false);
+                          e.target.value = "";
+                        }
+                      }}
+                      disabled={uploadingGovernmentId || !token}
+                      className="block w-full text-sm text-ink-700 file:mr-4 file:py-2 file:px-4 file:rounded-2xl file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary/90 file:cursor-pointer disabled:opacity-50"
+                    />
+                    {uploadingGovernmentId && (
+                      <p className="mt-2 text-sm text-ink-600">Uploading...</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-ink-900 mb-2">
+                    Upload Government ID
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file || !token) return;
+
+                      setUploadingGovernmentId(true);
+                      setServerError(null);
+
+                      try {
+                        const formData = new FormData();
+                        formData.append("file", file);
+
+                        const res = await fetch("/api/upload/government-id", {
+                          method: "POST",
+                          headers: { authorization: `Bearer ${token}` },
+                          body: formData
+                        });
+
+                        const json = await res.json();
+
+                        if (!res.ok) {
+                          setServerError(json.error || "Failed to upload document");
+                          return;
+                        }
+
+                        setGovernmentIdPath(json.filePath);
+                        setSavedMsg("Government ID uploaded successfully. Waiting for admin verification.");
+                      } catch (err) {
+                        setServerError("Failed to upload document");
+                      } finally {
+                        setUploadingGovernmentId(false);
+                        e.target.value = "";
+                      }
+                    }}
+                    disabled={uploadingGovernmentId || !token}
+                    className="block w-full text-sm text-ink-700 file:mr-4 file:py-2 file:px-4 file:rounded-2xl file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary/90 file:cursor-pointer disabled:opacity-50"
+                  />
+                  {uploadingGovernmentId && (
+                    <p className="mt-2 text-sm text-ink-600">Uploading...</p>
+                  )}
+                  <p className="mt-2 text-xs text-ink-600">
+                    Accepted formats: JPEG, PNG, WebP, PDF (Max 5MB)
+                  </p>
                 </div>
               )}
             </div>

@@ -5,14 +5,23 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
+import { VerificationBadge } from "@/components/events/verification-badge";
 import { Button } from "@/components/ui/button";
+import dynamic from "next/dynamic";
+
+// Dynamically import AddressMap to avoid SSR issues with Leaflet
+const AddressMap = dynamic(() => import("@/components/map/address-map").then((mod) => mod.AddressMap), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-64 rounded-lg border border-sand-200 bg-sand-100 flex items-center justify-center text-sm text-ink-600">
+      Loading map...
+    </div>
+  )
+});
 import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
 import { UserActionsMenu } from "@/components/user-actions-menu";
-
-function formatCurrency(paise: number): string {
-  return `₹${(paise / 100).toFixed(2)}`;
-}
+import { formatCurrency } from "@/lib/currency";
 
 function StarRating({ rating }: { rating: number }) {
   const fullStars = Math.floor(rating);
@@ -126,19 +135,33 @@ export default function HostProfilePage() {
               <h1 className="font-display text-4xl tracking-tight text-ink-900">
                 {host.firstName} {host.lastName}
               </h1>
-              {host.hostTier && (
-                <Badge className="mt-2">{host.hostTier.replace("_", " ")}</Badge>
-              )}
-              {host.isIdentityVerified && (
-                <Badge tone="success" className="mt-2 ml-2">
-                  Verified
-                </Badge>
-              )}
-              {host.isCulinaryCertified && (
-                <Badge tone="success" className="mt-2 ml-2">
-                  Culinary Certified
-                </Badge>
-              )}
+              <div className="mt-2 flex flex-wrap gap-2">
+                {host.hostTier && (
+                  <Badge>{host.hostTier.replace("_", " ")}</Badge>
+                )}
+                <VerificationBadge 
+                  isIdentityVerified={host.isIdentityVerified || false} 
+                  governmentIdPath={host.governmentIdPath || ""} 
+                />
+                {host.userStatus && (
+                  <Badge
+                    tone={
+                      host.userStatus === "VERIFIED" || host.userStatus === "ACTIVE"
+                        ? "success"
+                        : host.userStatus === "SUSPENDED"
+                          ? "warning"
+                          : undefined
+                    }
+                  >
+                    {host.userStatus === "VERIFIED" ? "✓ Verified" : host.userStatus}
+                  </Badge>
+                )}
+                {host.isCulinaryCertified && (
+                  <Badge tone="success">
+                    Culinary Certified
+                  </Badge>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {host.hostUserId && !isOwner && (
@@ -226,24 +249,15 @@ export default function HostProfilePage() {
             {venue && venue.latitude && venue.longitude && (
               <div className="rounded-3xl border border-sand-200 bg-white/60 p-6 shadow-soft backdrop-blur">
                 <h2 className="font-display text-xl text-ink-900 mb-4">Location</h2>
-                <div className="aspect-video bg-sand-100 rounded-lg overflow-hidden">
-                  <iframe
-                    width="100%"
-                    height="100%"
-                    frameBorder="0"
-                    style={{ border: 0 }}
-                    src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dRWTYQEA8HUh8w&q=${venue.latitude},${venue.longitude}&zoom=15`}
-                    allowFullScreen
-                  />
-                </div>
-                <a
-                  href={`https://www.google.com/maps?q=${venue.latitude},${venue.longitude}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-ink-600 hover:text-ink-900 mt-2 inline-block"
-                >
-                  View on Google Maps →
-                </a>
+                <AddressMap
+                  address={venue.address || ""}
+                  latitude={venue.latitude}
+                  longitude={venue.longitude}
+                  editable={false}
+                  onLocationSelect={() => {
+                    // No-op in view mode
+                  }}
+                />
               </div>
             )}
           </div>
@@ -270,6 +284,52 @@ export default function HostProfilePage() {
                   {venue.gamesAvailable.map((activity: string, idx: number) => (
                     <Badge key={idx}>{activity}</Badge>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Government ID Document (if uploaded) */}
+            {host.governmentIdPath && (
+              <div className="rounded-3xl border border-sand-200 bg-white/60 p-6 shadow-soft backdrop-blur">
+                <h2 className="font-display text-xl text-ink-900 mb-4">Government ID Verification</h2>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <VerificationBadge 
+                      isIdentityVerified={host.isIdentityVerified || false} 
+                      governmentIdPath={host.governmentIdPath || ""} 
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <a
+                      href={`/api/upload/serve?path=${encodeURIComponent(host.governmentIdPath)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-900 bg-sand-100 hover:bg-sand-200 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      View Document
+                    </a>
+                    <a
+                      href={`/api/upload/serve?path=${encodeURIComponent(host.governmentIdPath)}&download=true`}
+                      download
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-900 bg-sand-100 hover:bg-sand-200 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Download Document
+                    </a>
+                  </div>
+                  <p className="text-xs text-ink-600">
+                    {host.isIdentityVerified 
+                      ? "This host's identity has been verified by our administration."
+                      : host.governmentIdPath 
+                        ? "Government ID document uploaded. Verification pending."
+                        : ""}
+                  </p>
                 </div>
               </div>
             )}
@@ -368,11 +428,21 @@ export default function HostProfilePage() {
                     >
                       <div className="text-sm font-medium text-ink-900 mb-2">{event.eventName}</div>
                       <div className="text-xs text-ink-600 mb-2">
-                        {new Date(event.startAt).toLocaleDateString()} •{" "}
-                        {new Date(event.startAt).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit"
-                        })}
+                        {mounted ? (
+                          <>
+                            {new Intl.DateTimeFormat("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric"
+                            }).format(new Date(event.startAt))} •{" "}
+                            {new Intl.DateTimeFormat("en-US", {
+                              hour: "2-digit",
+                              minute: "2-digit"
+                            }).format(new Date(event.startAt))}
+                          </>
+                        ) : (
+                          "Loading..."
+                        )}
                       </div>
                       <div className="text-xs text-ink-600">
                         {event.bookingsCount} bookings • {formatCurrency(event.basePricePerGuest)} per
@@ -404,7 +474,11 @@ export default function HostProfilePage() {
                     >
                       <div className="text-sm font-medium text-ink-900 mb-2">{event.eventName}</div>
                       <div className="text-xs text-ink-600 mb-2">
-                        {new Date(event.startAt).toLocaleDateString()}
+                        {mounted ? new Intl.DateTimeFormat("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric"
+                        }).format(new Date(event.startAt)) : "Loading..."}
                       </div>
                       <div className="text-xs text-ink-600">
                         {event.bookingsCount} bookings • {formatCurrency(event.basePricePerGuest)} per
@@ -443,7 +517,11 @@ export default function HostProfilePage() {
                     <div>
                       <div className="font-medium text-ink-900">{review.eventName}</div>
                       <div className="text-xs text-ink-600">
-                        {new Date(review.eventDate).toLocaleDateString()}
+                        {mounted ? new Intl.DateTimeFormat("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric"
+                        }).format(new Date(review.eventDate)) : "Loading..."}
                       </div>
                     </div>
                     <StarRating rating={review.rating} />

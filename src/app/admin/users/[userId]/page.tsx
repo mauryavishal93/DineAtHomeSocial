@@ -40,6 +40,14 @@ export default function UserDetailPage() {
 
     if (res.ok && res.data) {
       setUserDetail(res.data);
+      // Debug: Log host profile data to verify governmentIdPath is present
+      if (res.data.hostProfile) {
+        console.log("Host Profile Data:", {
+          hasGovernmentIdPath: !!res.data.hostProfile.governmentIdPath,
+          governmentIdPath: res.data.hostProfile.governmentIdPath,
+          isIdentityVerified: res.data.hostProfile.isIdentityVerified
+        });
+      }
     } else if (!res.ok) {
       console.error("Failed to load user details:", res.error);
     }
@@ -180,14 +188,88 @@ export default function UserDetailPage() {
                       {formatCurrency(userDetail.hostProfile.totalRevenue)}
                     </span>
                   </div>
-                  <div className="flex gap-2">
-                    {userDetail.hostProfile.isIdentityVerified && (
-                      <Badge tone="success">Identity Verified</Badge>
+                  <div className="flex gap-2 flex-wrap">
+                    {userDetail.hostProfile.isIdentityVerified ? (
+                      <Badge tone="success">✓ Identity Verified</Badge>
+                    ) : userDetail.hostProfile.governmentIdPath ? (
+                      <Badge tone="warning">⏳ Pending Verification</Badge>
+                    ) : (
+                      <Badge tone="ink">No ID Uploaded</Badge>
                     )}
                     {userDetail.hostProfile.isCulinaryCertified && (
                       <Badge tone="success">Culinary Certified</Badge>
                     )}
                   </div>
+                  
+                  {/* Government ID Document Section - Always visible when document exists */}
+                  {userDetail.hostProfile?.governmentIdPath && userDetail.hostProfile.governmentIdPath.trim() !== "" && (
+                    <div className={`mt-4 p-4 rounded-2xl border-2 ${
+                      userDetail.hostProfile.isIdentityVerified 
+                        ? "border-green-200 bg-green-50/50" 
+                        : "border-orange-200 bg-orange-50/50"
+                    }`}>
+                      <div className="mb-3">
+                        <h3 className="font-semibold text-ink-900">Government ID Document</h3>
+                        <p className="text-sm text-ink-600 mt-1">
+                          {userDetail.hostProfile.isIdentityVerified
+                            ? "This host's identity has been verified. You can view or download the document below."
+                            : "Review and verify the host's government ID document"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 mb-3">
+                        <a
+                          href={`/api/upload/serve?path=${encodeURIComponent(userDetail.hostProfile.governmentIdPath)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-900 bg-white hover:bg-sand-50 border border-sand-200 rounded-lg transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          View Document
+                        </a>
+                        <a
+                          href={`/api/upload/serve?path=${encodeURIComponent(userDetail.hostProfile.governmentIdPath)}&download=true`}
+                          download
+                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-900 bg-white hover:bg-sand-50 border border-sand-200 rounded-lg transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          Download Document
+                        </a>
+                      </div>
+                      {!userDetail.hostProfile.isIdentityVerified && (
+                        <button
+                          onClick={async () => {
+                            const token = getAccessToken();
+                            if (!token) return;
+                            
+                            if (!confirm("Are you sure you want to verify this host's identity?")) {
+                              return;
+                            }
+                            
+                            const res = await apiFetch(`/api/admin/hosts/verify`, {
+                              method: "POST",
+                              headers: { Authorization: `Bearer ${token}` },
+                              body: JSON.stringify({ userId: userDetail.user._id })
+                            });
+                            
+                            if (res.ok) {
+                              alert("Host verified successfully!");
+                              loadUserDetail();
+                            } else {
+                              alert(res.error || "Failed to verify host");
+                            }
+                          }}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                          ✓ Verify Host Identity
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

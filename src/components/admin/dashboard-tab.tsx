@@ -1,5 +1,7 @@
 "use client";
 
+import { formatCurrency } from "@/lib/currency";
+
 interface AnalyticsSummary {
   users: {
     total: number;
@@ -79,10 +81,6 @@ function StatCard({
   );
 }
 
-function formatCurrency(paise: number): string {
-  return `₹${(paise / 100).toFixed(2)}`;
-}
-
 function formatNumber(num: number): string {
   return new Intl.NumberFormat("en-IN").format(num);
 }
@@ -108,23 +106,23 @@ export function DashboardTab({
       <div className="grid gap-4 md:grid-cols-4">
         <StatCard
           title="Total Revenue"
-          value={formatCurrency(analytics.revenue.totalRevenue)}
-          subtitle={`This Month: ${formatCurrency(analytics.revenue.thisMonth)}`}
+          value={formatCurrency(analytics.revenue.totalRevenue, true)}
+          subtitle={`This Month: ${formatCurrency(analytics.revenue.thisMonth, true)}`}
           tone="success"
         />
         <StatCard
           title="Registration Fees"
-          value={formatCurrency(analytics.revenue.registrationFees)}
+          value={formatCurrency(analytics.revenue.registrationFees, true)}
           subtitle={`From ${analytics.users.hosts} hosts`}
         />
         <StatCard
           title="Commissions"
-          value={formatCurrency(analytics.revenue.commissions)}
+          value={formatCurrency(analytics.revenue.commissions, true)}
           subtitle="20% of bookings"
         />
         <StatCard
           title="Projected Monthly"
-          value={formatCurrency(analytics.revenue.projectedMonthly)}
+          value={formatCurrency(analytics.revenue.projectedMonthly, true)}
           subtitle="Based on trends"
         />
       </div>
@@ -165,7 +163,7 @@ export function DashboardTab({
         <StatCard
           title="Bookings"
           value={formatNumber(analytics.bookings.confirmed)}
-          subtitle={`Revenue: ${formatCurrency(analytics.bookings.revenue)}`}
+          subtitle={`Revenue: ${formatCurrency(analytics.bookings.revenue, true)}`}
         />
         <StatCard
           title="Traffic (This Month)"

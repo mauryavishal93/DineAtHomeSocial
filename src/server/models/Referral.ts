@@ -4,7 +4,7 @@ const ReferralSchema = new Schema(
   {
     referrerUserId: { type: Types.ObjectId, ref: "User", required: true, index: true },
     referredUserId: { type: Types.ObjectId, ref: "User", required: true, index: true },
-    referralCode: { type: String, required: true, unique: true, index: true },
+    referralCode: { type: String, required: true },
     referralType: {
       type: String,
       required: true,
@@ -33,7 +33,7 @@ const ReferralSchema = new Schema(
 );
 
 ReferralSchema.index({ referrerUserId: 1, status: 1 });
-ReferralSchema.index({ referralCode: 1 });
+ReferralSchema.index({ referralCode: 1 }, { unique: true });
 
 export type ReferralDoc = InferSchemaType<typeof ReferralSchema>;
 export const Referral = models.Referral || model("Referral", ReferralSchema);

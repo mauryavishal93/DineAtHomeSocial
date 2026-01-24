@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken } from "@/lib/session";
+import { formatCurrency, paiseToRupees, rupeesToPaise } from "@/lib/currency";
 
 export function SettingsTab() {
   const [settings, setSettings] = useState<any>(null);
@@ -49,9 +50,7 @@ export function SettingsTab() {
     setSaving(false);
   }
 
-  function formatCurrency(paise: number): string {
-    return `₹${(paise / 100).toFixed(2)}`;
-  }
+  // Using formatCurrency from lib/currency
 
   if (loading) {
     return <div className="text-center py-12 text-ink-600">Loading settings...</div>;
@@ -68,18 +67,18 @@ export function SettingsTab() {
 
         <div>
           <label className="block text-sm font-medium text-ink-700 mb-1">
-            Host Registration Fee (in paise)
+            Host Registration Fee (in Rupees)
           </label>
           <input
             type="number"
-            value={settings.hostRegistrationFee}
+            value={paiseToRupees(settings.hostRegistrationFee)}
             onChange={(e) =>
-              setSettings({ ...settings, hostRegistrationFee: Number.parseInt(e.target.value, 10) })
+              setSettings({ ...settings, hostRegistrationFee: rupeesToPaise(Number.parseFloat(e.target.value) || 0) })
             }
             className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm"
           />
           <div className="text-xs text-ink-600 mt-1">
-            Current: {formatCurrency(settings.hostRegistrationFee)}
+            Current: {formatCurrency(settings.hostRegistrationFee, true)}
           </div>
         </div>
 

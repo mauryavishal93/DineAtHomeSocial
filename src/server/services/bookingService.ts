@@ -67,6 +67,16 @@ export async function createBooking(input: {
     throw new Error("Not enough seats");
   }
   
+  // Check if host is suspended
+  const hostUser = await User.findById(slotDoc.hostUserId)
+    .select({ status: 1 })
+    .lean();
+  const hostStatus = (hostUser as any)?.status || "ACTIVE";
+  
+  if (hostStatus === "SUSPENDED") {
+    throw new Error("This event is not available because the host has been suspended. Please contact support for assistance.");
+  }
+  
   // Calculate new seats remaining
   const newSeatsRemaining = slotDoc.seatsRemaining - input.seats;
   const newStatus = newSeatsRemaining <= 0 ? "FULL" : "OPEN";

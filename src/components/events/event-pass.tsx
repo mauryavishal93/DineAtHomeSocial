@@ -53,17 +53,23 @@ type EventPassProps = {
 };
 
 export function EventPass({ pass, onClose }: EventPassProps) {
+  const [mounted, setMounted] = useState(false);
   const [downloading, setDownloading] = useState<"image" | "pdf" | null>(null);
   const passRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const formatDate = (dateString: string) => {
+    if (!mounted) return "";
     const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
+    return new Intl.DateTimeFormat("en-US", {
       weekday: "long",
       year: "numeric",
       month: "long",
       day: "numeric"
-    });
+    }).format(date);
   };
 
   const formatTime = (dateString: string) => {
@@ -320,7 +326,13 @@ export function EventPass({ pass, onClose }: EventPassProps) {
               </p>
               {pass.validatedAt && (
                 <p className="text-xs text-ink-500 mt-1">
-                  Checked in: {new Date(pass.validatedAt).toLocaleString()}
+                  Checked in: {mounted ? new Intl.DateTimeFormat("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit"
+                  }).format(new Date(pass.validatedAt)) : ""}
                 </p>
               )}
             </div>

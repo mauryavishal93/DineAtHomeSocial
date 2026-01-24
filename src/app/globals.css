@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Leaflet CSS */
+@import "leaflet/dist/leaflet.css";
+
 :root {
   --bg: 251 250 248; /* sand-50 */
   --fg: 31 36 48; /* ink-900 */

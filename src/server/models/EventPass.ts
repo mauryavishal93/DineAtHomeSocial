@@ -2,7 +2,7 @@ import { Schema, model, models, type InferSchemaType, Types } from "mongoose";
 
 const EventPassSchema = new Schema(
   {
-    bookingId: { type: Types.ObjectId, ref: "Booking", required: true, index: true },
+    bookingId: { type: Types.ObjectId, ref: "Booking", required: true },
     eventSlotId: { type: Types.ObjectId, ref: "EventSlot", required: true, index: true },
     guestUserId: { type: Types.ObjectId, ref: "User", required: true, index: true },
     hostUserId: { type: Types.ObjectId, ref: "User", required: true, index: true },
@@ -11,8 +11,6 @@ const EventPassSchema = new Schema(
     eventCode: { 
       type: String, 
       required: true, 
-      unique: true, 
-      index: true,
       uppercase: true
     },
     

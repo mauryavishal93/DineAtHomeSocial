@@ -111,7 +111,7 @@ export function CheckInInterface({ eventId }: CheckInInterfaceProps) {
           <Button
             onClick={handleVerify}
             disabled={verifying || !eventCode.trim()}
-            className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white"
+            className="rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white"
           >
             {verifying ? "Verifying..." : "Verify"}
           </Button>

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken } from "@/lib/session";
+import { formatCurrency } from "@/lib/currency";
 
 export function EventsTab() {
   const [events, setEvents] = useState<any[]>([]);
@@ -121,7 +122,6 @@ export function EventsTab() {
             <thead className="bg-sand-50">
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Event</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Event ID</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Host Name</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Host Email</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-ink-900">Date</th>
@@ -142,7 +142,6 @@ export function EventsTab() {
                       {event.eventName}
                     </a>
                   </td>
-                  <td className="px-4 py-3 text-sm text-ink-600 font-mono">{event._id.slice(0, 8)}...</td>
                   <td className="px-4 py-3">
                     <Link
                       href={`/hosts/${event.hostUserId}`}
@@ -162,7 +161,7 @@ export function EventsTab() {
                   </td>
                   <td className="px-4 py-3 text-sm text-ink-900">{event.bookingsCount}</td>
                   <td className="px-4 py-3 text-sm text-ink-900">
-                    ₹{(event.revenue / 100).toFixed(2)}
+                    {formatCurrency(event.revenue, true)}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">

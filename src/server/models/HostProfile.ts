@@ -12,9 +12,11 @@ const HostProfileSchema = new Schema(
     
     // Verification
     isIdentityVerified: { type: Boolean, default: false },
+    governmentIdPath: { type: String, default: "" }, // Path to uploaded government ID document
     isCulinaryCertified: { type: Boolean, default: false },
     certificationDetails: { type: String, default: "" },
     verificationDate: { type: Date, default: null },
+    verifiedBy: { type: Types.ObjectId, ref: "User", default: null }, // Admin who verified
     isBackgroundVerified: { type: Boolean, default: false },
     
     // Host tier based on performance

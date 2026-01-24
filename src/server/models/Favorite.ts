@@ -23,11 +23,9 @@ const FavoriteSchema = new Schema(
 );
 
 FavoriteSchema.index({ userId: 1, favoriteType: 1 });
-FavoriteSchema.index({ userId: 1, eventId: 1 });
-FavoriteSchema.index({ userId: 1, hostUserId: 1 });
 FavoriteSchema.index({ userId: 1, favoriteType: 1, createdAt: -1 });
 
-// Prevent duplicates
+// Prevent duplicates (sparse unique indexes handle both indexing and uniqueness)
 FavoriteSchema.index({ userId: 1, eventId: 1 }, { unique: true, sparse: true });
 FavoriteSchema.index({ userId: 1, hostUserId: 1 }, { unique: true, sparse: true });
 

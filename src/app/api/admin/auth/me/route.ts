@@ -15,12 +15,16 @@ export async function GET(req: Request) {
     return ok(admin);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
-    const stack = e instanceof Error ? e.stack : undefined;
-    console.error("Admin auth/me error:", msg);
-    console.error("Error stack:", stack);
-    console.error("Full error:", e);
-    
     const lowerMsg = msg.toLowerCase();
+    
+    // Only log unexpected errors, not standard auth failures
+    if (!lowerMsg.includes("missing token") && 
+        !lowerMsg.includes("invalid token") && 
+        !lowerMsg.includes("admin access required") &&
+        !lowerMsg.includes("invalid")) {
+      console.error("Admin auth/me error:", msg);
+    }
+    
     if (lowerMsg.includes("missing token") || lowerMsg.includes("invalid token") || lowerMsg.includes("invalid")) {
       return unauthorized("Invalid or missing authentication token");
     }

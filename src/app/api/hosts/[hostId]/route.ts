@@ -156,9 +156,11 @@ export async function GET(
         bio: (hostProfile as any).bio || "",
         hostTier: (hostProfile as any).hostTier || "STANDARD",
         isIdentityVerified: (hostProfile as any).isIdentityVerified || false,
+        governmentIdPath: (hostProfile as any).governmentIdPath || "",
         isCulinaryCertified: (hostProfile as any).isCulinaryCertified || false,
         profileImagePath: (hostProfile as any).profileImagePath || "",
-        coverImagePath: (hostProfile as any).coverImagePath || ""
+        coverImagePath: (hostProfile as any).coverImagePath || "",
+        userStatus: user.status || "PENDING" // Include user status
       },
       venue: venueDoc
         ? {

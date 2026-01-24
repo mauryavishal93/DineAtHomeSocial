@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { VerificationBadge } from "./verification-badge";
 
 export type UIEvent = {
   id: string;
@@ -20,6 +21,8 @@ export type UIEvent = {
   hostUserId: string;
   hostRating: number;
   verified: boolean;
+  governmentIdPath?: string;
+  hostStatus?: string;
   foodTags: string[];
   cuisines?: string[];
   foodType?: string;
@@ -44,9 +47,16 @@ function formatTimeLabel(startIso: string, endIso: string) {
 
 export function EventCard({ ev }: { ev: UIEvent }) {
   const router = useRouter();
-  const dateLabel = formatDateLabel(ev.startAt);
-  const timeLabel = formatTimeLabel(ev.startAt, ev.endAt);
+  const [mounted, setMounted] = useState(false);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  
+  // Only compute date labels on client to avoid hydration mismatches
+  const dateLabel = mounted ? formatDateLabel(ev.startAt) : "";
+  const timeLabel = mounted ? formatTimeLabel(ev.startAt, ev.endAt) : "";
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const eventImages = ev.eventImages || [];
   const eventVideos = ev.eventVideos || [];
@@ -152,9 +162,14 @@ export function EventCard({ ev }: { ev: UIEvent }) {
             <span className="text-ink-600">• {ev.hostRating.toFixed(1)}</span>
           </div>
         </div>
-        <div className="absolute left-4 top-4 z-20 flex gap-2">
-          {ev.verified ? <Badge tone="success">✓ Verified</Badge> : <Badge tone="sky">✨ New</Badge>}
-          {ev.seatsLeft <= 3 ? <Badge tone="warning">⚡ Few seats</Badge> : null}
+        <div className="absolute left-4 top-4 z-20 flex gap-2 flex-wrap">
+          <VerificationBadge isIdentityVerified={ev.verified} governmentIdPath={ev.governmentIdPath} />
+          {ev.hostStatus === "SUSPENDED" ? (
+            <Badge tone="warning" className="bg-red-100 text-red-800 border-red-300">
+              ⚠️ Host Suspended
+            </Badge>
+          ) : null}
+          {ev.seatsLeft <= 3 && ev.hostStatus !== "SUSPENDED" ? <Badge tone="warning">⚡ Few seats</Badge> : null}
         </div>
       </div>
       <div className="p-4">
@@ -166,7 +181,7 @@ export function EventCard({ ev }: { ev: UIEvent }) {
             <div className="mt-1 text-sm text-ink-700">{ev.venueName}</div>
           </div>
           <div className="shrink-0 text-right">
-            <div className="text-lg font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent">₹{ev.priceFrom}</div>
+            <div className="text-lg font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent">₹{Math.round(ev.priceFrom)}</div>
             <div className="text-xs text-ink-600 font-medium">from / guest</div>
           </div>
         </div>
@@ -179,7 +194,13 @@ export function EventCard({ ev }: { ev: UIEvent }) {
             <span className="text-ink-600">{ev.seatsLeft} left</span>
           </div>
           <div className="text-ink-600">
-            {dateLabel} • {timeLabel}
+            {mounted ? (
+              <>
+                {dateLabel} • {timeLabel}
+              </>
+            ) : (
+              <span className="invisible">Loading...</span>
+            )}
           </div>
         </div>
 
@@ -198,7 +219,7 @@ export function EventCard({ ev }: { ev: UIEvent }) {
         <div className="mt-4 flex items-center justify-between border-t-2 border-gradient-to-r from-violet-200 via-pink-200 to-orange-200 bg-gradient-to-r from-violet-50/50 via-pink-50/50 to-orange-50/50 pt-3 px-2 -mx-2 -mb-2 rounded-b-3xl">
           <span className="text-xs font-medium text-ink-700">Tap to view details & book</span>
           <span className="rounded-full border-2 border-violet-300 bg-gradient-to-r from-violet-100 to-pink-100 px-3 py-1 text-xs font-semibold text-violet-800 shadow-sm">
-            {dateLabel}
+            {mounted ? dateLabel : "..."}
           </span>
         </div>
       </div>

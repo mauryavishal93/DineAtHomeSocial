@@ -6,9 +6,67 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const address = searchParams.get("address");
+    const latitude = searchParams.get("latitude");
+    const longitude = searchParams.get("longitude");
 
+    // Reverse geocoding: coordinates to address
+    if (latitude && longitude) {
+      const lat = parseFloat(latitude);
+      const lon = parseFloat(longitude);
+      
+      if (isNaN(lat) || isNaN(lon)) {
+        return badRequest("Invalid latitude or longitude");
+      }
+
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`,
+          {
+            headers: {
+              "User-Agent": "DineAtHomeSocial/1.0 (contact@dineathomesocial.com)"
+            }
+          }
+        );
+
+        if (!response.ok) {
+          console.error("Nominatim reverse geocoding error:", response.status, response.statusText);
+          return serverError(`Reverse geocoding service error: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (data && data.address) {
+          const addr = data.address || {};
+          const formattedAddress = data.display_name || `Location at ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+          const city = addr.city || addr.town || addr.village || addr.city_district || addr.county || "";
+          const state = addr.state || addr.region || addr.state_district || "";
+          const country = addr.country || "";
+          const postalCode = addr.postcode || "";
+          const locality = addr.suburb || addr.neighbourhood || addr.locality || addr.city_district || city || "";
+
+          return ok({
+            latitude: lat,
+            longitude: lon,
+            formattedAddress,
+            city,
+            state,
+            country,
+            postalCode,
+            locality
+          });
+        }
+
+        return badRequest("Could not find address for the given coordinates");
+      } catch (fetchError) {
+        console.error("Reverse geocoding fetch error:", fetchError);
+        const errorMsg = fetchError instanceof Error ? fetchError.message : "Unknown error";
+        return serverError(`Failed to connect to reverse geocoding service: ${errorMsg}`);
+      }
+    }
+
+    // Forward geocoding: address to coordinates
     if (!address) {
-      return badRequest("Address parameter is required");
+      return badRequest("Address parameter is required for forward geocoding");
     }
 
     // Use a free geocoding service (Nominatim/OpenStreetMap)
