@@ -125,6 +125,8 @@ export function UserNav() {
     );
   }
 
+  // Hide Join button when logged in - user is already joined
+
   return (
     <div className="relative" ref={dropdownRef}>
       <Button

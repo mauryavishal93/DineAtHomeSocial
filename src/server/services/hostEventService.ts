@@ -2,6 +2,7 @@ import { connectMongo } from "@/server/db/mongoose";
 import { EventSlot } from "@/server/models/EventSlot";
 import { Booking } from "@/server/models/Booking";
 import { Venue } from "@/server/models/Venue";
+import { Notification } from "@/server/models/Notification";
 
 export type HostEventWithGuests = {
   id: string;
@@ -17,6 +18,7 @@ export type HostEventWithGuests = {
   bookingsCount: number;
   totalSeatsBooked: number;
   isPast: boolean;
+  status?: string;
   guests: Array<{
     bookingId: string;
     guestUserId: string;
@@ -118,6 +120,7 @@ export async function getHostEvents(hostUserId: string): Promise<{
       bookingsCount: bookings.length,
       totalSeatsBooked,
       isPast,
+      status: (event as any).status || "OPEN", // Include status
       guests
     };
 
@@ -129,4 +132,83 @@ export async function getHostEvents(hostUserId: string): Promise<{
   }
 
   return { upcoming, past };
+}
+
+export async function cancelEventByHost(
+  eventId: string,
+  hostUserId: string,
+  reason: string
+): Promise<void> {
+  await connectMongo();
+
+  const event = await EventSlot.findById(eventId);
+  if (!event) throw new Error("Event not found");
+
+  // Verify host owns this event
+  if (String((event as any).hostUserId) !== hostUserId) {
+    throw new Error("Unauthorized: You can only cancel your own events");
+  }
+
+  // Check if already cancelled
+  if ((event as any).status === "CANCELLED") {
+    throw new Error("Event is already cancelled");
+  }
+
+  // Update event status and cancellation info
+  (event as any).status = "CANCELLED";
+  (event as any).cancelledAt = new Date();
+  (event as any).cancellationReason = reason || "";
+  await event.save();
+
+  // Get all confirmed bookings for this event
+  const bookings = await Booking.find({
+    eventSlotId: eventId,
+    status: { $in: ["PAYMENT_PENDING", "CONFIRMED"] }
+  }).lean();
+
+  // Cancel all bookings and update with cancellation info
+  const bookingIds = bookings.map(b => (b as any)._id);
+  await Booking.updateMany(
+    { _id: { $in: bookingIds } },
+    {
+      $set: {
+        status: "CANCELLED",
+        cancelledAt: new Date(),
+        cancellationReason: `Event cancelled by host: ${reason || "No reason provided"}`
+      }
+    }
+  );
+
+  // Create notifications for all guests who had bookings
+  const notifications = bookings.map((booking: any) => ({
+    userId: booking.guestUserId,
+    title: "Event Cancelled",
+    message: `The event "${(event as any).eventName}" has been cancelled by the host.${reason ? ` Reason: ${reason}` : ""}`,
+    type: "EVENT_CANCELLED",
+    relatedEventId: eventId,
+    relatedBookingId: String(booking._id),
+    isRead: false
+  }));
+
+  if (notifications.length > 0) {
+    // Check for recent duplicate notifications to avoid spam
+    const existingNotifications = await Notification.find({
+      userId: { $in: notifications.map(n => n.userId) },
+      type: "EVENT_CANCELLED",
+      relatedEventId: eventId,
+      createdAt: { $gte: new Date(Date.now() - 60000) } // Within last minute
+    }).lean();
+
+    const existingUserIds = new Set(
+      existingNotifications.map((n: any) => String(n.userId))
+    );
+
+    const newNotifications = notifications.filter(
+      n => !existingUserIds.has(String(n.userId))
+    );
+
+    if (newNotifications.length > 0) {
+      await Notification.insertMany(newNotifications);
+    }
+  }
 }

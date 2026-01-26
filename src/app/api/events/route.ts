@@ -56,7 +56,11 @@ export async function GET(req: Request) {
       }
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed";
+    const msg = e instanceof Error ? e.message : "Failed to load events";
+    const stack = e instanceof Error ? e.stack : undefined;
+    console.error("Events API error:", msg);
+    console.error("Error stack:", stack);
+    console.error("Full error:", e);
     return serverError(msg);
   }
 }

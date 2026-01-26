@@ -7,7 +7,7 @@ import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
-import { getAccessToken } from "@/lib/session";
+import { getAccessToken, getRole } from "@/lib/session";
 
 type Conversation = {
   eventSlotId: string;
@@ -31,8 +31,13 @@ type Conversation = {
 export default function MessagesPage() {
   const router = useRouter();
   const token = getAccessToken();
+  const [role, setRole] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setRole(getRole());
+  }, []);
 
   useEffect(() => {
     if (!token) {
@@ -89,9 +94,11 @@ export default function MessagesPage() {
               <Button asChild>
                 <Link href="/events">Browse Events</Link>
               </Button>
-              <Button variant="outline" asChild>
-                <Link href="/host">Become a Host</Link>
-              </Button>
+              {role === "GUEST" && (
+                <Button variant="outline" asChild>
+                  <Link href="/host">Become a Host</Link>
+                </Button>
+              )}
             </div>
           </div>
         ) : (

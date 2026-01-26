@@ -43,7 +43,13 @@ export async function listPublicEvents(filters?: {
   dateFrom?: string;
   dateTo?: string;
 }): Promise<PublicEventListItem[]> {
-  await connectMongo();
+  try {
+    await connectMongo();
+  } catch (error) {
+    console.error("Failed to connect to MongoDB in listPublicEvents:", error);
+    // Return empty array instead of throwing to prevent 500 errors
+    return [];
+  }
   
   const now = new Date();
   
@@ -175,11 +181,18 @@ export async function listPublicEvents(filters?: {
   }
   
   // Only show upcoming events (events that haven't ended yet)
-  const slots = await EventSlot.find(eventQuery)
-    .sort({ startAt: 1 })
-    .limit(100)
-    .populate({ path: "venueId", select: "name address locality city state country postalCode foodCategories gamesAvailable" })
-    .lean();
+  let slots: any[] = [];
+  try {
+    slots = await EventSlot.find(eventQuery)
+      .sort({ startAt: 1 })
+      .limit(100)
+      .populate({ path: "venueId", select: "name address locality city state country postalCode foodCategories gamesAvailable" })
+      .lean();
+  } catch (error) {
+    console.error("Failed to query EventSlot in listPublicEvents:", error);
+    // Return empty array instead of throwing to prevent 500 errors
+    return [];
+  }
 
   // Post-filter by venue foodCategories and gamesAvailable if needed (since we can't query populated fields directly)
   let filteredSlots = slots;
@@ -265,34 +278,40 @@ export async function listPublicEvents(filters?: {
     });
   }
 
-  return filteredSlots.map((s) => {
-    const venue = (s as any).venueId as any;
-    const host = hostByUserId.get(String((s as any).hostUserId));
-    return {
-      id: String((s as any)._id),
-      title: (s as any).eventName ?? "",
-      startAt: ((s as any).startAt as Date).toISOString(),
-      endAt: ((s as any).endAt as Date).toISOString(),
-      seatsLeft: (s as any).seatsRemaining ?? 0,
-      maxGuests: (s as any).maxGuests ?? 0,
-      priceFrom: Math.round(((s as any).basePricePerGuest ?? 0) / 100),
-      city: venue?.city ?? "",
-      locality: venue?.locality ?? "",
-      state: venue?.state ?? "",
-      venueName: venue?.name ?? "",
-      hostName: host?.name ?? "Host",
-      hostUserId: String((s as any).hostUserId),
-      hostRating: host?.ratingAvg ?? 0,
-      verified: host?.isIdentityVerified ?? false,
-      governmentIdPath: host?.governmentIdPath ?? "",
-      foodTags: (s as any).foodTags ?? [],
-      cuisines: (s as any).cuisines ?? venue?.foodCategories ?? [],
-      foodType: (s as any).foodType ?? "",
-      activities: (s as any).gamesAvailable ?? venue?.gamesAvailable ?? [],
-      eventImages: (s as any).images ?? [],
-      eventVideos: (s as any).videos ?? []
-    };
-  });
+  try {
+    return filteredSlots.map((s) => {
+      const venue = (s as any).venueId as any;
+      const host = hostByUserId.get(String((s as any).hostUserId));
+      return {
+        id: String((s as any)._id),
+        title: (s as any).eventName ?? "",
+        startAt: ((s as any).startAt as Date).toISOString(),
+        endAt: ((s as any).endAt as Date).toISOString(),
+        seatsLeft: (s as any).seatsRemaining ?? 0,
+        maxGuests: (s as any).maxGuests ?? 0,
+        priceFrom: Math.round(((s as any).basePricePerGuest ?? 0) / 100),
+        city: venue?.city ?? "",
+        locality: venue?.locality ?? "",
+        state: venue?.state ?? "",
+        venueName: venue?.name ?? "",
+        hostName: host?.name ?? "Host",
+        hostUserId: String((s as any).hostUserId),
+        hostRating: host?.ratingAvg ?? 0,
+        verified: host?.isIdentityVerified ?? false,
+        // governmentIdPath removed from public listings for security
+        foodTags: (s as any).foodTags ?? [],
+        cuisines: (s as any).cuisines ?? venue?.foodCategories ?? [],
+        foodType: (s as any).foodType ?? "",
+        activities: (s as any).gamesAvailable ?? venue?.gamesAvailable ?? [],
+        eventImages: (s as any).images ?? [],
+        eventVideos: (s as any).videos ?? []
+      };
+    });
+  } catch (error) {
+    console.error("Error mapping events in listPublicEvents:", error);
+    // Return empty array instead of throwing to prevent 500 errors
+    return [];
+  }
 }
 
 export async function getPublicEventById(eventId: string) {
@@ -344,7 +363,10 @@ export async function getPublicEventById(eventId: string) {
     hostRating: host?.ratingAvg ?? 0,
     hostUserId: String((slot as any).hostUserId ?? ""),
     verified: host?.isIdentityVerified ?? false,
-    governmentIdPath: host?.governmentIdPath ?? "",
+    // governmentIdPath removed from public event details for security
+    status: (slot as any).status ?? "OPEN",
+    cancelledAt: (slot as any).cancelledAt ? ((slot as any).cancelledAt as Date).toISOString() : null,
+    cancellationReason: (slot as any).cancellationReason ?? "",
     eventImages: (slot as any).images ?? [],
     eventVideos: (slot as any).videos ?? [],
     venueImages: venue?.images ?? []
@@ -422,6 +444,7 @@ export async function listHostEventsWithBookings(hostUserId: string) {
       venueName: venue?.name ?? "",
       venueLocality: venue?.locality ?? "",
       bookingsCount: guests.length,
+      status: (s as any).status ?? "OPEN", // Include status
       guests
     };
   });

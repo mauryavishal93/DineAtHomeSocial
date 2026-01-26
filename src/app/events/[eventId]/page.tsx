@@ -17,6 +17,7 @@ import { CheckInButton } from "@/components/check-in/check-in-button";
 import { CheckInInterface } from "@/components/check-in/check-in-interface";
 import { ReminderButton } from "@/components/events/reminder-button";
 import { RefundModal } from "@/components/modals/refund-modal";
+import { CancelEventModal } from "@/components/modals/cancel-event-modal";
 import { EventPass } from "@/components/events/event-pass";
 import dynamic from "next/dynamic";
 
@@ -57,6 +58,9 @@ type EventDetail = {
   verified: boolean;
   governmentIdPath?: string;
   hostStatus?: string;
+  status?: string;
+  cancelledAt?: string | null;
+  cancellationReason?: string;
   eventImages?: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>;
   eventVideos?: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>;
   venueImages?: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>;
@@ -128,7 +132,13 @@ export default function EventDetailPage({
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isEventOwner, setIsEventOwner] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [cancelModal, setCancelModal] = useState<{ bookingId: string; amount: number; eventName: string } | null>(null);
+  const [cancelEventModal, setCancelEventModal] = useState<{
+    eventId: string;
+    eventName: string;
+    bookingsCount: number;
+  } | null>(null);
   const [eventBookings, setEventBookings] = useState<Array<{
     bookingId: string;
     guestName: string;
@@ -183,12 +193,18 @@ export default function EventDetailPage({
         headers: { authorization: `Bearer ${token}` }
       });
 
-      if (res.ok && res.data.userId && ev.hostUserId) {
+      if (res.ok && res.data) {
         setCurrentUserId(res.data.userId);
+        setUserRole(res.data.role);
         // Check if user owns the event (regardless of role - they might be logged in as Guest but own the event)
-        setIsEventOwner(res.data.userId === ev.hostUserId);
+        if (res.data.userId && ev.hostUserId) {
+          setIsEventOwner(res.data.userId === ev.hostUserId);
+        } else {
+          setIsEventOwner(false);
+        }
       } else {
         setIsEventOwner(false);
+        setUserRole(null);
       }
     })();
   }, [token, ev]);
@@ -576,7 +592,23 @@ export default function EventDetailPage({
                     </h1>
                     <p className="mt-2 text-ink-700">{ev.theme}</p>
                   </div>
-                  <ShareButton eventId={ev.id} />
+                  <div className="flex items-center gap-2">
+                    {isEventOwner && ev && ev.status !== "CANCELLED" && new Date(ev.startAt) > new Date() && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCancelEventModal({
+                          eventId: ev.id,
+                          eventName: ev.title,
+                          bookingsCount: eventBookings.filter(b => b.status === "CONFIRMED" || b.status === "PAYMENT_PENDING").length
+                        })}
+                        className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                      >
+                        Cancel Event
+                      </Button>
+                    )}
+                    <ShareButton eventId={ev.id} />
+                  </div>
                 </div>
 
                 <div className="mt-5 grid gap-2 text-sm text-ink-700 sm:grid-cols-2">
@@ -913,6 +945,42 @@ export default function EventDetailPage({
               </div>
             </div>
 
+            {/* Event Cancellation Notice */}
+            {ev.status === "CANCELLED" && (
+              <div className="rounded-3xl border-2 border-orange-300 bg-orange-50/80 p-6 shadow-soft backdrop-blur mb-6">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <svg className="w-6 h-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-orange-900 mb-2">Event Cancelled</h3>
+                    <p className="text-sm text-orange-800 mb-2">
+                      This event has been cancelled by the host.
+                    </p>
+                    {ev.cancellationReason && (
+                      <div className="mt-3 p-3 bg-white/60 rounded-lg border border-orange-200">
+                        <p className="text-xs font-medium text-orange-900 mb-1">Cancellation Reason:</p>
+                        <p className="text-sm text-orange-800">{ev.cancellationReason}</p>
+                      </div>
+                    )}
+                    {ev.cancelledAt && (
+                      <p className="text-xs text-orange-700 mt-2">
+                        Cancelled on: {mounted ? new Intl.DateTimeFormat("en-US", { 
+                          month: "long", 
+                          day: "numeric", 
+                          year: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit"
+                        }).format(new Date(ev.cancelledAt)) : ""}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="rounded-3xl border border-sand-200 bg-white/50 p-6 shadow-soft backdrop-blur">
               <div className="font-medium text-ink-900">About the host</div>
               <div className="mt-3 flex items-center gap-3 flex-wrap">
@@ -964,12 +1032,31 @@ export default function EventDetailPage({
                     }}
                   />
                 )}
-                {isEventOwner && role === "HOST" && (
+                {isEventOwner && (
                   <>
                     <ReminderButton eventId={ev.id} isHost={true} />
                     <div className="text-xs text-ink-600">
                       Send reminders to all confirmed guests
                     </div>
+                    {ev && ev.status !== "CANCELLED" && new Date(ev.startAt) > new Date() && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setCancelEventModal({
+                            eventId: ev.id,
+                            eventName: ev.title,
+                            bookingsCount: eventBookings.filter(b => b.status === "CONFIRMED" || b.status === "PAYMENT_PENDING").length
+                          })}
+                          className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                        >
+                          Cancel Event
+                        </Button>
+                        <div className="text-xs text-ink-600">
+                          Cancel this event and notify all guests
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
                 {/* Guest Chat Button - Only show if guest has booked, booking is not cancelled, and event hasn't ended */}
@@ -1364,6 +1451,7 @@ export default function EventDetailPage({
                         disabled={
                           bookingInProgress || 
                           ev.hostStatus === "SUSPENDED" ||
+                          ev.status === "CANCELLED" ||
                           ev.seatsLeft < 1 ||
                           !currentUser ||
                           remainingSeatsAllowed === 0 ||
@@ -1461,7 +1549,7 @@ export default function EventDetailPage({
           </aside>
 
           {/* Event Owner View: Check-in Interface for Hosts */}
-          {isEventOwner && role === "HOST" && (
+          {isEventOwner && (userRole === "HOST" || role === "HOST") && (
             <aside className="mt-6 h-fit rounded-3xl border border-violet-200 bg-gradient-to-br from-violet-50/50 to-pink-50/50 p-6 shadow-soft backdrop-blur">
               <div className="font-medium text-ink-900 mb-4">Check-In Guests</div>
               <CheckInInterface eventId={ev.id} />
@@ -1617,6 +1705,53 @@ export default function EventDetailPage({
                 setEv(eventRes.data);
               }
             })();
+          }}
+        />
+      )}
+
+      {cancelEventModal && (
+        <CancelEventModal
+          isOpen={!!cancelEventModal}
+          onClose={() => setCancelEventModal(null)}
+          eventId={cancelEventModal.eventId}
+          eventName={cancelEventModal.eventName}
+          bookingsCount={cancelEventModal.bookingsCount}
+          onSuccess={() => {
+            // Refresh event data after successful cancellation
+            (async () => {
+              const { eventId } = await params;
+              const eventRes = await apiFetch<EventDetail>(`/api/events/${eventId}`, { method: "GET" });
+              if (eventRes.ok && eventRes.data) {
+                setEv(eventRes.data);
+              }
+              // Refresh bookings
+              if (isEventOwner && token) {
+                const bookingsRes = await apiFetch<{
+                  bookings: Array<{
+                    bookingId: string;
+                    guestName: string;
+                    guestMobile: string;
+                    guestAge: number;
+                    guestGender: string;
+                    seats: number;
+                    status: string;
+                    additionalGuests: Array<{
+                      name: string;
+                      age: number;
+                      gender: string;
+                      mobile: string;
+                    }>;
+                  }>;
+                }>(`/api/events/${eventId}/bookings`, {
+                  method: "GET",
+                  headers: { authorization: `Bearer ${token}` }
+                });
+                if (bookingsRes.ok && bookingsRes.data) {
+                  setEventBookings(bookingsRes.data.bookings);
+                }
+              }
+            })();
+            setCancelEventModal(null);
           }}
         />
       )}

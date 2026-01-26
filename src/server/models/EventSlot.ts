@@ -80,6 +80,9 @@ const EventSlotSchema = new Schema(
       default: "OPEN",
       enum: ["OPEN", "FULL", "COMPLETED", "CANCELLED"] satisfies EventStatus[]
     },
+    // Cancellation fields
+    cancelledAt: { type: Date, default: null },
+    cancellationReason: { type: String, default: "" },
     guestList: { type: [Types.ObjectId], ref: "User", default: [] },
     allowedGuestTypes: {
       type: [String],

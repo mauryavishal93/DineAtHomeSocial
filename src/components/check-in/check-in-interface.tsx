@@ -111,7 +111,8 @@ export function CheckInInterface({ eventId }: CheckInInterfaceProps) {
           <Button
             onClick={handleVerify}
             disabled={verifying || !eventCode.trim()}
-            className="rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white"
+            size="sm"
+            className="px-4 py-1 leading-none font-bold whitespace-nowrap"
           >
             {verifying ? "Verifying..." : "Verify"}
           </Button>
