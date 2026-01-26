@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
+import { requireAuth, requireAdminAuth } from "@/server/auth/rbac";
+import { connectMongo } from "@/server/db/mongoose";
+import { HostProfile } from "@/server/models/HostProfile";
 
 export const runtime = "nodejs";
 
@@ -23,6 +26,54 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid image path" }, { status: 400 });
     }
 
+    // Check if this is a government ID document - requires authorization
+    const lowerPath = imagePath.toLowerCase();
+    if (lowerPath.startsWith("government-ids/")) {
+      await connectMongo();
+      
+      // Try to get auth context (optional for other files, required for government IDs)
+      let authContext = null;
+      let isAdmin = false;
+      
+      try {
+        const authHeader = req.headers.get("authorization");
+        if (authHeader) {
+          try {
+            authContext = await requireAuth(req as unknown as { headers: Headers });
+            // Check if admin
+            try {
+              await requireAdminAuth(req as unknown as { headers: Headers });
+              isAdmin = true;
+            } catch {
+              // Not admin, continue
+            }
+          } catch {
+            // Not authenticated, will check ownership below
+          }
+        }
+      } catch {
+        // No auth provided
+      }
+
+      // Find which host owns this government ID
+      const hostProfile = await HostProfile.findOne({ governmentIdPath: imagePath }).lean();
+      
+      if (!hostProfile) {
+        return NextResponse.json({ error: "Document not found" }, { status: 404 });
+      }
+
+      const hostUserId = String((hostProfile as any).userId);
+      
+      // Check authorization: must be the owner or an admin
+      if (!authContext) {
+        return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      }
+
+      if (!isAdmin && authContext.userId !== hostUserId) {
+        return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      }
+    }
+
     const fullPath = join(UPLOAD_DIR, imagePath);
 
     if (!existsSync(fullPath)) {
@@ -33,7 +84,6 @@ export async function GET(req: NextRequest) {
 
     // Determine content type and filename
     let contentType = "application/octet-stream";
-    const lowerPath = imagePath.toLowerCase();
     const fileName = imagePath.split("/").pop() || "download";
     
     if (lowerPath.endsWith(".png")) {

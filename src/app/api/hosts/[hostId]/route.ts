@@ -6,6 +6,7 @@ import { Venue } from "@/server/models/Venue";
 import { EventSlot } from "@/server/models/EventSlot";
 import { Feedback } from "@/server/models/Feedback";
 import { Booking } from "@/server/models/Booking";
+import { requireAuth, requireAdminAuth } from "@/server/auth/rbac";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,33 @@ export async function GET(
   try {
     await connectMongo();
     const { hostId } = await params;
+
+    // Check if user is authorized to see governmentIdPath
+    let canViewGovernmentId = false;
+    let currentUserId: string | null = null;
+    
+    try {
+      const authHeader = req.headers.get("authorization");
+      if (authHeader) {
+        try {
+          const authContext = await requireAuth(req as unknown as { headers: Headers });
+          currentUserId = authContext.userId;
+          
+          // Check if admin
+          try {
+            await requireAdminAuth(req as unknown as { headers: Headers });
+            canViewGovernmentId = true;
+          } catch {
+            // Not admin, check if owner
+            canViewGovernmentId = authContext.userId === hostId;
+          }
+        } catch {
+          // Not authenticated
+        }
+      }
+    } catch {
+      // No auth provided
+    }
 
     // Get user
     const userDoc = await User.findById(hostId).lean();
@@ -156,7 +184,8 @@ export async function GET(
         bio: (hostProfile as any).bio || "",
         hostTier: (hostProfile as any).hostTier || "STANDARD",
         isIdentityVerified: (hostProfile as any).isIdentityVerified || false,
-        governmentIdPath: (hostProfile as any).governmentIdPath || "",
+        // Only return governmentIdPath if user is owner or admin
+        governmentIdPath: canViewGovernmentId ? ((hostProfile as any).governmentIdPath || "") : "",
         isCulinaryCertified: (hostProfile as any).isCulinaryCertified || false,
         profileImagePath: (hostProfile as any).profileImagePath || "",
         coverImagePath: (hostProfile as any).coverImagePath || "",

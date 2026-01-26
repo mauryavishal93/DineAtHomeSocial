@@ -177,9 +177,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link className="block hover:text-ink-900" href="/events">
                 Events
               </Link>
-              <Link className="block hover:text-ink-900" href="/host">
-                Become a host
-              </Link>
+              {(!role || role === "GUEST") && (
+                <Link className="block hover:text-ink-900" href="/host">
+                  Become a host
+                </Link>
+              )}
               <Link className="block hover:text-ink-900" href="/how-it-works">
                 How it works
               </Link>

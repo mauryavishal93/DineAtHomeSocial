@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { EventsGrid } from "@/components/events/events-grid";
 import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
+import { getRole } from "@/lib/session";
 
 type FilterOptions = {
   cities: string[];
@@ -18,6 +20,8 @@ type FilterOptions = {
 };
 
 export default function EventsPage() {
+  const [mounted, setMounted] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [selectedFilters, setSelectedFilters] = useState<{
     cities: string[];
     localities: string[];
@@ -47,6 +51,11 @@ export default function EventsPage() {
   });
 
   const [loadingFilters, setLoadingFilters] = useState(true);
+
+  useEffect(() => {
+    setMounted(true);
+    setUserRole(getRole());
+  }, []);
 
   // Fetch available filter options from API
   useEffect(() => {
@@ -127,8 +136,8 @@ export default function EventsPage() {
   return (
     <main className="py-10">
       <Container>
-        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-2">
+        <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-2 flex-1">
             <div className="text-sm font-medium text-ink-700">Explore</div>
             <h1 className="font-display text-4xl tracking-tight text-ink-900">
               Events near you
@@ -137,11 +146,18 @@ export default function EventsPage() {
               Click on filters below to search events. Multiple selections allowed in each category.
             </p>
           </div>
-          {hasActiveFilters && (
-            <Button variant="outline" onClick={clearFilters} size="sm">
-              Clear All Filters
-            </Button>
-          )}
+          <div className="flex gap-3 items-start">
+            {mounted && userRole === "HOST" && (
+              <Button size="lg" asChild>
+                <Link href="/host/events/new">Create an Event</Link>
+              </Button>
+            )}
+            {hasActiveFilters && (
+              <Button variant="outline" onClick={clearFilters} size="sm">
+                Clear All Filters
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="mt-8 grid gap-6 md:grid-cols-[320px_1fr]">

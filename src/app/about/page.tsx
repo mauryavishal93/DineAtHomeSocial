@@ -1,9 +1,20 @@
+"use client";
+
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { useState, useEffect } from "react";
+import { getRole } from "@/lib/session";
 
 export default function AboutPage() {
+  const [mounted, setMounted] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+    setUserRole(getRole());
+  }, []);
   return (
     <main className="bg-gradient-to-b from-sand-50 to-white">
       {/* Hero Section */}
@@ -378,14 +389,16 @@ export default function AboutPage() {
               >
                 <Link href="/events">Browse Events</Link>
               </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-white text-white hover:bg-white/10"
-                asChild
-              >
-                <Link href="/host">Become a Host</Link>
-              </Button>
+              {mounted && userRole !== "HOST" && (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-white text-white hover:bg-white/10"
+                  asChild
+                >
+                  <Link href="/host">Become a Host</Link>
+                </Button>
+              )}
             </div>
           </div>
         </Container>

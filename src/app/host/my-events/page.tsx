@@ -10,6 +10,7 @@ import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
 import { ReminderButton } from "@/components/events/reminder-button";
 import { RateGuestModal, GuestRatingData } from "@/components/modals/rate-guest-modal";
+import { CancelEventModal } from "@/components/modals/cancel-event-modal";
 
 type GuestInfo = {
   bookingId: string;
@@ -39,6 +40,7 @@ type HostEvent = {
   bookingsCount: number;
   totalSeatsBooked: number;
   isPast: boolean;
+  status?: string;
   guests: GuestInfo[];
 };
 
@@ -68,6 +70,33 @@ export default function HostMyEventsPage() {
     guestIndex?: number;
   } | null>(null);
 
+  // Cancel event modal state
+  const [cancelModal, setCancelModal] = useState<{
+    eventId: string;
+    eventName: string;
+    bookingsCount: number;
+  } | null>(null);
+
+  const loadEvents = async () => {
+    if (!token) return;
+    setLoading(true);
+    setError(null);
+    const res = await apiFetch<{ upcoming: HostEvent[]; past: HostEvent[] }>(
+      "/api/host/my-events",
+      {
+        method: "GET",
+        headers: { authorization: `Bearer ${token}` }
+      }
+    );
+    setLoading(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setUpcoming(res.data.upcoming);
+    setPast(res.data.past);
+  };
+
   useEffect(() => {
     if (!token) {
       router.push("/auth/login");
@@ -78,24 +107,7 @@ export default function HostMyEventsPage() {
       return;
     }
 
-    (async () => {
-      setLoading(true);
-      setError(null);
-      const res = await apiFetch<{ upcoming: HostEvent[]; past: HostEvent[] }>(
-        "/api/host/my-events",
-        {
-          method: "GET",
-          headers: { authorization: `Bearer ${token}` }
-        }
-      );
-      setLoading(false);
-      if (!res.ok) {
-        setError(res.error);
-        return;
-      }
-      setUpcoming(res.data.upcoming);
-      setPast(res.data.past);
-    })();
+    loadEvents();
   }, [token, role, router]);
 
   const toggleEventExpand = (eventId: string) => {
@@ -260,7 +272,11 @@ export default function HostMyEventsPage() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <Badge tone="success">Upcoming</Badge>
+                        {event.status === "CANCELLED" ? (
+                          <Badge tone="orange">Cancelled</Badge>
+                        ) : (
+                          <Badge tone="success">Upcoming</Badge>
+                        )}
                         <div className="mt-3 text-sm">
                           <div className="font-medium text-ink-900">
                             {event.totalSeatsBooked} guests booked
@@ -276,7 +292,23 @@ export default function HostMyEventsPage() {
                       <Button size="sm" variant="outline" asChild>
                         <Link href={`/events/${event.id}`}>View Event</Link>
                       </Button>
-                      <ReminderButton eventId={event.id} isHost={true} />
+                      {!event.isPast && event.status !== "CANCELLED" && (
+                        <>
+                          <ReminderButton eventId={event.id} isHost={true} />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCancelModal({
+                              eventId: event.id,
+                              eventName: event.title,
+                              bookingsCount: event.bookingsCount
+                            })}
+                            className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                          >
+                            Cancel Event
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -456,6 +488,19 @@ export default function HostMyEventsPage() {
           />
         )}
       </Container>
+
+      {cancelModal && (
+        <CancelEventModal
+          isOpen={!!cancelModal}
+          onClose={() => setCancelModal(null)}
+          eventId={cancelModal.eventId}
+          eventName={cancelModal.eventName}
+          bookingsCount={cancelModal.bookingsCount}
+          onSuccess={() => {
+            loadEvents();
+          }}
+        />
+      )}
     </main>
   );
 }

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
+import { CancelEventModal } from "@/components/modals/cancel-event-modal";
 
 type HostEvent = {
   id: string;
@@ -20,6 +21,7 @@ type HostEvent = {
   venueName: string;
   venueLocality: string;
   bookingsCount: number;
+  status?: string;
   guests: Array<{
     bookingId: string;
     userId: string;
@@ -39,6 +41,28 @@ export default function HostEventsPage() {
   const [events, setEvents] = useState<HostEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cancelModal, setCancelModal] = useState<{
+    eventId: string;
+    eventName: string;
+    bookingsCount: number;
+  } | null>(null);
+
+  const loadEvents = async () => {
+    if (!token) return;
+    setLoading(true);
+    setError(null);
+    const res = await apiFetch<HostEvent[]>("/api/host/events", {
+      method: "GET",
+      headers: { authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      setError(res.error);
+      setLoading(false);
+      return;
+    }
+    setEvents(res.data ?? []);
+    setLoading(false);
+  };
 
   useEffect(() => {
     if (!token) {
@@ -49,22 +73,7 @@ export default function HostEventsPage() {
       router.push("/");
       return;
     }
-
-    (async () => {
-      setLoading(true);
-      setError(null);
-      const res = await apiFetch<HostEvent[]>("/api/host/events", {
-        method: "GET",
-        headers: { authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) {
-        setError(res.error);
-        setLoading(false);
-        return;
-      }
-      setEvents(res.data ?? []);
-      setLoading(false);
-    })();
+    loadEvents();
   }, [role, router, token]);
 
   return (
@@ -112,6 +121,23 @@ export default function HostEventsPage() {
                   <Button variant="outline" size="sm" asChild>
                     <Link href={`/events/${ev.id}`}>View public</Link>
                   </Button>
+                  {new Date(ev.startAt) > new Date() && ev.status !== "CANCELLED" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCancelModal({
+                        eventId: ev.id,
+                        eventName: ev.title,
+                        bookingsCount: ev.bookingsCount
+                      })}
+                      className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                    >
+                      Cancel Event
+                    </Button>
+                  )}
+                  {ev.status === "CANCELLED" && (
+                    <Badge tone="orange">Cancelled</Badge>
+                  )}
                 </div>
               </div>
 
@@ -151,6 +177,19 @@ export default function HostEventsPage() {
           ) : null}
         </div>
       </Container>
+
+      {cancelModal && (
+        <CancelEventModal
+          isOpen={!!cancelModal}
+          onClose={() => setCancelModal(null)}
+          eventId={cancelModal.eventId}
+          eventName={cancelModal.eventName}
+          bookingsCount={cancelModal.bookingsCount}
+          onSuccess={() => {
+            loadEvents();
+          }}
+        />
+      )}
     </main>
   );
 }

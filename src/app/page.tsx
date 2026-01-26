@@ -13,6 +13,7 @@ import { TrendingEvents } from "@/components/home/trending-events";
 import { CategoryFilters } from "@/components/home/category-filters";
 import { EventCalendar } from "@/components/home/event-calendar";
 import { apiFetch } from "@/lib/http";
+import { getRole } from "@/lib/session";
 
 interface FeaturedEvent {
   id: string;
@@ -39,6 +40,7 @@ interface PlatformStats {
 
 export default function HomePage() {
   const [mounted, setMounted] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [cityFilter, setCityFilter] = useState("");
   const [localityFilter, setLocalityFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");
@@ -52,6 +54,7 @@ export default function HomePage() {
 
   useEffect(() => {
     setMounted(true);
+    setUserRole(getRole());
   }, []);
   const [loadingFeatured, setLoadingFeatured] = useState(true);
   
@@ -145,9 +148,15 @@ export default function HomePage() {
                 <Button size="lg" asChild>
                   <Link href="/events">Explore events</Link>
                 </Button>
-                <Button size="lg" variant="outline" asChild>
-                  <Link href="/host">Become a host</Link>
-                </Button>
+                {userRole === "HOST" ? (
+                  <Button size="lg" variant="outline" asChild>
+                    <Link href="/host/events/new">Create an event</Link>
+                  </Button>
+                ) : (
+                  <Button size="lg" variant="outline" asChild>
+                    <Link href="/host">Become a host</Link>
+                  </Button>
+                )}
               </div>
               <div className="grid gap-4 pt-2 sm:grid-cols-3">
                 <div className="group rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-violet-50 via-white to-pink-50 p-5 shadow-lg backdrop-blur transition-all duration-300 hover:scale-105 hover:shadow-colorful hover:border-violet-300">
@@ -291,9 +300,11 @@ export default function HomePage() {
                 <div className="rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/50 to-violet-50/50 shadow-colorful backdrop-blur p-6">
                   <div className="text-center py-12">
                     <div className="text-sm text-ink-600">No upcoming events yet</div>
-                    <Button className="mt-4" asChild>
-                      <Link href="/host">Become the first host</Link>
-                    </Button>
+                    {userRole !== "HOST" && (
+                      <Button className="mt-4" asChild>
+                        <Link href="/host">Become the first host</Link>
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}
@@ -501,9 +512,11 @@ export default function HomePage() {
                 <Button asChild>
                   <Link href="/how-it-works">Learn more</Link>
                 </Button>
-                <Button variant="outline" asChild>
-                  <Link href="/auth/register">Join now</Link>
-                </Button>
+                {mounted && !userRole && (
+                  <Button variant="outline" asChild>
+                    <Link href="/auth/register">Join now</Link>
+                  </Button>
+                )}
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
@@ -573,9 +586,15 @@ export default function HomePage() {
                 <Badge tone="orange">🎨 Event themes</Badge>
               </div>
               <div className="mt-6">
-                <Button variant="outline" asChild>
-                  <Link href="/host">Become a host</Link>
-                </Button>
+                {userRole === "HOST" ? (
+                  <Button variant="outline" asChild>
+                    <Link href="/host/events/new">Create an event</Link>
+                  </Button>
+                ) : (
+                  <Button variant="outline" asChild>
+                    <Link href="/host">Become a host</Link>
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -602,9 +621,11 @@ export default function HomePage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 md:justify-end">
-                <Button size="lg" asChild className="bg-white text-violet-600 hover:bg-white/90 font-bold shadow-xl border-0">
-                  <Link href="/auth/register">Join now</Link>
-                </Button>
+                {mounted && !userRole && (
+                  <Button size="lg" asChild className="bg-white text-violet-600 hover:bg-white/90 font-bold shadow-xl border-0">
+                    <Link href="/auth/register">Join now</Link>
+                  </Button>
+                )}
                 <Button size="lg" variant="outline" asChild className="border-2 border-white text-white hover:bg-white/10 font-bold bg-transparent">
                   <Link href="/events">Explore events</Link>
                 </Button>

@@ -47,9 +47,11 @@ export default function HostMarketingPage() {
               help build trust for both sides.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button size="lg" onClick={handleBecomeHostClick}>
-                Become a host
-              </Button>
+              {role !== "HOST" && (
+                <Button size="lg" onClick={handleBecomeHostClick}>
+                  Become a host
+                </Button>
+              )}
               {role === "HOST" && (
                 <>
                   <Button size="lg" variant="ghost" asChild>

@@ -1026,10 +1026,27 @@ export default function ProfilePage() {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <a
-                        href={`/api/upload/serve?path=${encodeURIComponent(governmentIdPath)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        onClick={async () => {
+                          if (!token) {
+                            alert("Please log in to view the document");
+                            return;
+                          }
+                          try {
+                            const res = await fetch(`/api/upload/serve?path=${encodeURIComponent(governmentIdPath)}`, {
+                              headers: { authorization: `Bearer ${token}` }
+                            });
+                            if (res.ok) {
+                              const blob = await res.blob();
+                              const url = window.URL.createObjectURL(blob);
+                              window.open(url, "_blank");
+                            } else {
+                              alert("Failed to load document");
+                            }
+                          } catch (error) {
+                            alert("Failed to load document");
+                          }
+                        }}
                         className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-violet-600 hover:text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1037,17 +1054,41 @@ export default function ProfilePage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                         </svg>
                         View Document
-                      </a>
-                      <a
-                        href={`/api/upload/serve?path=${encodeURIComponent(governmentIdPath)}&download=true`}
-                        download
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!token) {
+                            alert("Please log in to download the document");
+                            return;
+                          }
+                          try {
+                            const res = await fetch(`/api/upload/serve?path=${encodeURIComponent(governmentIdPath)}&download=true`, {
+                              headers: { authorization: `Bearer ${token}` }
+                            });
+                            if (res.ok) {
+                              const blob = await res.blob();
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = governmentIdPath.split("/").pop() || "government-id";
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                              window.URL.revokeObjectURL(url);
+                            } else {
+                              alert("Failed to download document");
+                            }
+                          } catch (error) {
+                            alert("Failed to download document");
+                          }
+                        }}
                         className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-violet-600 hover:text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
                         Download Document
-                      </a>
+                      </button>
                     </div>
                   </div>
                   <div>

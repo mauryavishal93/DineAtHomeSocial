@@ -50,6 +50,7 @@ export default function HostProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState<"events" | "reviews">("events");
   const [mounted, setMounted] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -70,8 +71,9 @@ export default function HostProfilePage() {
     const token = getAccessToken();
     const role = getRole();
     
-    if (!token || role !== "HOST") {
+    if (!token) {
       setIsOwner(false);
+      setIsAdmin(false);
       return;
     }
 
@@ -79,14 +81,17 @@ export default function HostProfilePage() {
       const res = await apiFetch<{ userId: string; role: string }>("/api/me", {
         headers: { authorization: `Bearer ${token}` }
       });
-      if (res.ok && res.data.userId) {
+      if (res.ok && res.data) {
         setCurrentUserId(res.data.userId);
         setIsOwner(res.data.userId === hostId && res.data.role === "HOST");
+        setIsAdmin(res.data.role === "ADMIN");
       } else {
         setIsOwner(false);
+        setIsAdmin(false);
       }
     } catch (error) {
       setIsOwner(false);
+      setIsAdmin(false);
     }
   }
 
@@ -288,22 +293,44 @@ export default function HostProfilePage() {
               </div>
             )}
 
-            {/* Government ID Document (if uploaded) */}
-            {host.governmentIdPath && (
-              <div className="rounded-3xl border border-sand-200 bg-white/60 p-6 shadow-soft backdrop-blur">
-                <h2 className="font-display text-xl text-ink-900 mb-4">Government ID Verification</h2>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <VerificationBadge 
-                      isIdentityVerified={host.isIdentityVerified || false} 
-                      governmentIdPath={host.governmentIdPath || ""} 
-                    />
-                  </div>
+            {/* Government ID Verification Section - Always visible */}
+            <div className="rounded-3xl border border-sand-200 bg-white/60 p-6 shadow-soft backdrop-blur">
+              <h2 className="font-display text-xl text-ink-900 mb-4">Government ID Verification</h2>
+              <div className="space-y-3">
+                <p className="text-sm text-ink-700">
+                  Government-issued ID (Aadhaar, PAN, Passport, or Driver's License) for verification
+                </p>
+                <div className="flex items-center gap-2">
+                  <VerificationBadge 
+                    isIdentityVerified={host.isIdentityVerified || false} 
+                    governmentIdPath={host.governmentIdPath || ""} 
+                  />
+                </div>
+                {/* Document links - Only visible to owner or admin */}
+                {(isOwner || isAdmin) && host.governmentIdPath && (
                   <div className="flex gap-3">
-                    <a
-                      href={`/api/upload/serve?path=${encodeURIComponent(host.governmentIdPath)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={async () => {
+                        const token = getAccessToken();
+                        if (!token) {
+                          alert("Please log in to view the document");
+                          return;
+                        }
+                        try {
+                          const res = await fetch(`/api/upload/serve?path=${encodeURIComponent(host.governmentIdPath)}`, {
+                            headers: { authorization: `Bearer ${token}` }
+                          });
+                          if (res.ok) {
+                            const blob = await res.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            window.open(url, "_blank");
+                          } else {
+                            alert("Failed to load document. You may not have permission to view it.");
+                          }
+                        } catch (error) {
+                          alert("Failed to load document");
+                        }
+                      }}
                       className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-900 bg-sand-100 hover:bg-sand-200 rounded-lg transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -311,28 +338,53 @@ export default function HostProfilePage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                       </svg>
                       View Document
-                    </a>
-                    <a
-                      href={`/api/upload/serve?path=${encodeURIComponent(host.governmentIdPath)}&download=true`}
-                      download
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const token = getAccessToken();
+                        if (!token) {
+                          alert("Please log in to download the document");
+                          return;
+                        }
+                        try {
+                          const res = await fetch(`/api/upload/serve?path=${encodeURIComponent(host.governmentIdPath)}&download=true`, {
+                            headers: { authorization: `Bearer ${token}` }
+                          });
+                          if (res.ok) {
+                            const blob = await res.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = host.governmentIdPath.split("/").pop() || "government-id";
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            window.URL.revokeObjectURL(url);
+                          } else {
+                            alert("Failed to download document. You may not have permission to download it.");
+                          }
+                        } catch (error) {
+                          alert("Failed to download document");
+                        }
+                      }}
                       className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-900 bg-sand-100 hover:bg-sand-200 rounded-lg transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                       </svg>
                       Download Document
-                    </a>
+                    </button>
                   </div>
-                  <p className="text-xs text-ink-600">
-                    {host.isIdentityVerified 
-                      ? "This host's identity has been verified by our administration."
-                      : host.governmentIdPath 
-                        ? "Government ID document uploaded. Verification pending."
-                        : ""}
-                  </p>
-                </div>
+                )}
+                <p className="text-xs text-ink-600">
+                  {host.isIdentityVerified 
+                    ? "This host's identity has been verified by our administration."
+                    : host.governmentIdPath 
+                      ? "Government ID document uploaded. Verification pending."
+                      : "Government ID verification is required for all hosts."}
+                </p>
               </div>
-            )}
+            </div>
 
             {/* Detailed Ratings */}
             <div className="rounded-3xl border border-sand-200 bg-white/60 p-6 shadow-soft backdrop-blur">
