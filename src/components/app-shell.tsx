@@ -199,7 +199,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="md:col-span-3 border-t border-sand-200 pt-6 text-xs text-ink-600">
-            © {new Date().getFullYear()} DineAtHome Social. Built with Next.js + MongoDB.
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>© {new Date().getFullYear()} DineAtHome Social.</div>
+              <div className="flex gap-4">
+                <Link href="/terms" className="hover:text-ink-900">
+                  Terms & Conditions
+                </Link>
+                <Link href="/support" className="hover:text-ink-900">
+                  Support
+                </Link>
+              </div>
+            </div>
           </div>
         </Container>
       </footer>
