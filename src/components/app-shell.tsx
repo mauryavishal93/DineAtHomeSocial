@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
 import { UserNav } from "@/components/account/user-nav";
@@ -10,7 +12,9 @@ import { getRole, getAccessToken } from "@/lib/session";
 import { apiFetch } from "@/lib/http";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [role, setRole] = useState<string | null>(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -21,6 +25,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setMounted(true);
     setRole(getRole());
   }, []);
+
+  // Close mobile nav on route change
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
 
   // Listen to session changes (login/logout)
   useEffect(() => {
@@ -100,40 +109,41 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen text-ink-900">
       <header className="sticky top-0 z-20 border-b-2 border-violet-200 bg-gradient-to-r from-white via-pink-50/50 to-violet-50/50 backdrop-blur-md shadow-sm">
-        <Container className="flex items-center justify-between py-4">
-          <Link href="/" className="flex items-center gap-2 group">
-            <span className="font-display text-xl tracking-tight bg-gradient-to-r from-violet-600 via-pink-600 to-orange-500 bg-clip-text text-transparent font-bold group-hover:scale-105 transition-transform">
+        <Container className="flex items-center justify-between gap-2 py-3 sm:py-4 min-h-[52px]">
+          <Link href="/" className="flex min-w-0 items-center gap-2 group shrink-0" aria-label="DineAtHome Social home">
+            <Image src="/logo.png" alt="" width={40} height={40} className="shrink-0 rounded-lg w-10 h-10 sm:w-9 sm:h-9" />
+            <span className="font-display text-base sm:text-lg md:text-xl tracking-tight bg-gradient-to-r from-violet-600 via-pink-600 to-orange-500 bg-clip-text text-transparent font-bold group-hover:scale-105 transition-transform truncate hidden sm:inline">
               DineAtHome Social
             </span>
           </Link>
-          <nav className="flex items-center gap-4 text-sm font-medium">
-            <Link href="/events" className="hidden text-ink-700 hover:text-violet-600 hover:font-semibold transition-colors sm:inline">
+          {/* Desktop nav */}
+          <nav className="hidden sm:flex items-center gap-2 md:gap-4 text-sm font-medium shrink-0">
+            <Link href="/events" className="text-ink-700 hover:text-violet-600 hover:font-semibold transition-colors">
               Events
             </Link>
-            <Link href="/communities" className="hidden text-ink-700 hover:text-pink-600 hover:font-semibold transition-colors sm:inline">
+            <Link href="/communities" className="hidden md:inline text-ink-700 hover:text-pink-600 hover:font-semibold transition-colors">
               Communities
             </Link>
-            <Link href="/membership" className="hidden text-ink-700 hover:text-orange-600 hover:font-semibold transition-colors sm:inline">
+            <Link href="/membership" className="hidden md:inline text-ink-700 hover:text-orange-600 hover:font-semibold transition-colors">
               Membership
             </Link>
             {showBecomeHost && (
               <Link 
                 href="/host" 
                 onClick={handleBecomeHostClick}
-                className="hidden text-ink-700 hover:text-violet-600 hover:font-semibold transition-colors sm:inline"
+                className="text-ink-700 hover:text-violet-600 hover:font-semibold transition-colors"
               >
                 Become a host
               </Link>
             )}
-            <Link href="/about" className="hidden text-ink-700 hover:text-sky-600 hover:font-semibold transition-colors sm:inline">
+            <Link href="/about" className="text-ink-700 hover:text-sky-600 hover:font-semibold transition-colors">
               About
             </Link>
             {mounted && role && (
               <>
-                {/* Messages Icon */}
                 <Link 
                   href="/messages" 
-                  className="hidden sm:inline relative p-2 text-ink-700 hover:text-violet-600 hover:bg-violet-50 rounded-full transition-all"
+                  className="relative p-2 text-ink-700 hover:text-violet-600 hover:bg-violet-50 rounded-full transition-all"
                   title="Messages"
                 >
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -145,11 +155,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     </span>
                   )}
                 </Link>
-
-                {/* Notifications Icon */}
                 <Link 
                   href="/notifications" 
-                  className="hidden sm:inline relative p-2 text-ink-700 hover:text-orange-600 hover:bg-orange-50 rounded-full transition-all"
+                  className="relative p-2 text-ink-700 hover:text-orange-600 hover:bg-orange-50 rounded-full transition-all"
                   title="Notifications"
                 >
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -165,7 +173,62 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
             <UserNav />
           </nav>
+          {/* Mobile: logo is left; keep Login/Join or Account + menu visible */}
+          <div className="flex sm:hidden items-center gap-2 shrink-0 min-h-[44px]">
+            {mounted && role && (
+              <>
+                <Link href="/messages" className="relative p-2.5 text-ink-700 rounded-full touch-manipulation" title="Messages" aria-label="Messages">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                  {unreadMessages > 0 && (
+                    <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-r from-pink-500 to-violet-500 text-[10px] font-bold text-white">{unreadMessages > 9 ? "9+" : unreadMessages}</span>
+                  )}
+                </Link>
+                <Link href="/notifications" className="relative p-2.5 text-ink-700 rounded-full touch-manipulation" title="Notifications" aria-label="Notifications">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  {unreadNotifications > 0 && (
+                    <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 text-[10px] font-bold text-white animate-pulse">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span>
+                  )}
+                </Link>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen((o) => !o)}
+              className="p-2.5 text-ink-700 rounded-lg hover:bg-sand-100 touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
+              aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileNavOpen}
+            >
+              {mobileNavOpen ? (
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+            <UserNav />
+          </div>
         </Container>
+        {/* Mobile nav dropdown */}
+        {mobileNavOpen && (
+          <div className="sm:hidden border-t border-violet-200 bg-white/95 backdrop-blur-md">
+            <nav className="mx-auto w-full max-w-6xl px-4 sm:px-6 py-3 flex flex-col gap-1">
+              <Link href="/events" className="px-4 py-3 rounded-xl text-ink-800 font-medium hover:bg-violet-50" onClick={() => setMobileNavOpen(false)}>Events</Link>
+              <Link href="/communities" className="px-4 py-3 rounded-xl text-ink-800 font-medium hover:bg-pink-50" onClick={() => setMobileNavOpen(false)}>Communities</Link>
+              <Link href="/membership" className="px-4 py-3 rounded-xl text-ink-800 font-medium hover:bg-orange-50" onClick={() => setMobileNavOpen(false)}>Membership</Link>
+              {showBecomeHost && (
+                <Link href="/host" className="px-4 py-3 rounded-xl text-ink-800 font-medium hover:bg-violet-50" onClick={(e) => { handleBecomeHostClick(e); setMobileNavOpen(false); }}>Become a host</Link>
+              )}
+              <Link href="/about" className="px-4 py-3 rounded-xl text-ink-800 font-medium hover:bg-sky-50" onClick={() => setMobileNavOpen(false)}>About</Link>
+            </nav>
+          </div>
+        )}
       </header>
       
       <BecomeHostModal 
@@ -173,11 +236,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         onClose={() => setIsModalOpen(false)} 
       />
       {children}
-      <footer className="mt-16 border-t-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/30 to-violet-50/30">
-        <Container className="grid gap-8 py-10 md:grid-cols-3">
+      <footer className="mt-12 sm:mt-16 border-t-2 border-violet-200 bg-gradient-to-br from-white via-pink-50/30 to-violet-50/30">
+        <Container className="grid gap-6 sm:gap-8 py-8 sm:py-10 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
           <div className="space-y-2">
-            <div className="font-display text-lg tracking-tight">
-              DineAtHome Social
+            <div className="flex items-center gap-2">
+              <Image src="/logo.png" alt="" width={28} height={28} className="rounded-lg" />
+              <span className="font-display text-lg tracking-tight">DineAtHome Social</span>
             </div>
             <div className="text-sm text-ink-700">
               Home-hosted dining, made social.

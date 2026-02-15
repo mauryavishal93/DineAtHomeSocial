@@ -47,7 +47,7 @@ const schema = z.object({
   cuisines: listFromCsv,
   activities: listFromCsv,
   email: z.string().email(),
-  mobile: z.string().min(8).max(20),
+  mobile: z.string().regex(/^\d{10}$/, "Mobile must be exactly 10 digits"),
   password: z.string().min(8)
 });
 
@@ -135,8 +135,9 @@ export function HostRegisterForm() {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <GoogleSignInButton 
-          role="HOST" 
+        <GoogleSignInButton
+          role="HOST"
+          variant="signup"
           onError={(error) => setServerError(error)}
         />
       </div>
@@ -235,7 +236,9 @@ export function HostRegisterForm() {
       />
       <Input
         label="Mobile"
-        placeholder="+91..."
+        placeholder="10-digit number"
+        maxLength={10}
+        inputMode="numeric"
         {...register("mobile")}
         error={errors.mobile?.message}
       />

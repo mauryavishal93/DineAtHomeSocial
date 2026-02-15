@@ -122,19 +122,19 @@ export default function HomePage() {
   }, [mounted]);
   return (
     <main>
-      <section className="pt-10 md:pt-16">
+      <section className="pt-6 sm:pt-10 md:pt-16 pb-6 sm:pb-10">
         <Container className="grain">
-          <div className="grid gap-10 md:grid-cols-2 md:items-center">
-            <div className="space-y-6">
+          <div className="grid gap-8 md:gap-10 md:grid-cols-2 md:items-center">
+            <div className="space-y-4 sm:space-y-6 min-w-0">
               <div className="flex flex-wrap gap-2 animate-fade-in">
                 <Badge tone="violet">🏠 Home hosts</Badge>
                 <Badge tone="pink">👥 Small groups</Badge>
                 <Badge tone="success">✓ ID verified</Badge>
               </div>
-              <h1 className="text-balance font-display text-4xl leading-[1.05] tracking-tight md:text-6xl bg-gradient-to-r from-violet-600 via-pink-600 to-orange-500 bg-clip-text text-transparent animate-gradient">
-                Dinners and Lunches that feel like a friend's home — with the ease of booking.
+              <h1 className="text-balance font-display text-2xl sm:text-4xl leading-[1.1] tracking-tight md:text-6xl bg-gradient-to-r from-violet-600 via-pink-600 to-orange-500 bg-clip-text text-transparent animate-gradient">
+                Dinners and Lunches that feel like a friend&apos;s home — with the ease of booking.
               </h1>
-              <p className="max-w-xl text-lg text-ink-700">
+              <p className="max-w-xl text-base sm:text-lg text-ink-700">
                 Home-hosted dining, made social. Book a seat, pay securely, and meet
                 guests who share your food preferences and interests.
               </p>

@@ -33,7 +33,7 @@ const schema = z.object({
   age: z.coerce.number().int().min(0).max(99),
   gender: z.enum(GENDER_OPTIONS),
   email: z.string().email(),
-  mobile: z.string().min(8).max(20),
+  mobile: z.string().regex(/^\d{10}$/, "Mobile must be exactly 10 digits"),
   password: z.string().min(8),
   interests: listFromCsv.optional()
 });
@@ -94,8 +94,9 @@ export function GuestRegisterForm() {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <GoogleSignInButton 
-          role="GUEST" 
+        <GoogleSignInButton
+          role="GUEST"
+          variant="signup"
           onError={(error) => setServerError(error)}
         />
       </div>
@@ -152,7 +153,9 @@ export function GuestRegisterForm() {
       />
       <Input
         label="Mobile"
-        placeholder="+91..."
+        placeholder="10-digit number"
+        maxLength={10}
+        inputMode="numeric"
         {...register("mobile")}
         error={errors.mobile?.message}
       />

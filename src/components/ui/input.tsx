@@ -14,7 +14,7 @@ export function Input({
       <input
         {...props}
         className={clsx(
-          "w-full rounded-xl border-2 px-4 py-2.5 text-sm outline-none transition-all duration-200",
+          "w-full rounded-xl border-2 px-4 py-2.5 min-h-[44px] text-sm outline-none transition-all duration-200",
           "bg-white/80 backdrop-blur-sm",
           "focus:border-violet-400 focus:ring-2 focus:ring-violet-200/50 focus:bg-white",
           "hover:border-violet-300",

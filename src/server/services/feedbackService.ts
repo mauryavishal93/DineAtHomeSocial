@@ -17,6 +17,15 @@ export type HostForRating = {
   hostName: string;
   venueName: string;
   alreadyRated: boolean;
+  /** When alreadyRated, the last rating given (read-only view) */
+  existingRating?: {
+    eventRating: number;
+    venueRating: number;
+    foodRating: number;
+    hospitalityRating: number;
+    comment: string;
+    ratedAt: string;
+  };
 };
 
 /**
@@ -132,19 +141,32 @@ export async function getHostForRating(
   
   const venueName = e.venueId?.name || "Venue";
   
-  // Check if already rated
+  // Check if already rated and get last rating for read-only view
   const existingFeedback = await Feedback.findOne({
     eventSlotId,
     fromUserId: guestUserId,
     toUserId: hostUserId,
     feedbackType: "HOST"
   }).lean();
-  
+
+  const fb = existingFeedback as any;
+  const existingRating = fb
+    ? {
+        eventRating: fb.eventRating ?? 0,
+        venueRating: fb.venueRating ?? 0,
+        foodRating: fb.foodRating ?? 0,
+        hospitalityRating: fb.hospitalityRating ?? 0,
+        comment: fb.comment ?? "",
+        ratedAt: fb.createdAt ? new Date(fb.createdAt).toISOString() : ""
+      }
+    : undefined;
+
   return {
     userId: hostUserId,
     hostName,
     venueName,
-    alreadyRated: !!existingFeedback
+    alreadyRated: !!existingFeedback,
+    existingRating
   };
 }
 

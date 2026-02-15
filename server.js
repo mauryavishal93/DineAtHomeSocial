@@ -1,11 +1,22 @@
 import { spawn } from "child_process";
 import path from "path";
 import process from "process";
+import os from "os";
 
 // Render automatically sets PORT, use it directly
 const port = process.env.PORT || "3000";
-// On Render and other cloud platforms, bind to 0.0.0.0 to accept external connections
-const hostname = process.env.HOSTNAME || (process.env.NODE_ENV === "production" ? "0.0.0.0" : "localhost");
+// Bind to 0.0.0.0 so the app is reachable from other devices on the same network
+const hostname = process.env.HOSTNAME || "0.0.0.0";
+
+function getLocalNetworkIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === "IPv4" && !iface.internal) return iface.address;
+    }
+  }
+  return null;
+}
 
 // If NODE_ENV isn't set, default to development for local runs.
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "development";
@@ -38,7 +49,10 @@ const args = dev
   ? ["dev", "-p", port, "-H", hostname]
   : ["start", "-p", port, "-H", hostname];
 
-console.log(`Starting Next.js in ${dev ? "development" : "production"} mode on ${hostname}:${port}`);
+const networkIP = hostname === "0.0.0.0" ? getLocalNetworkIP() : hostname;
+console.log(`Starting Next.js in ${dev ? "development" : "production"} mode`);
+console.log(`  Local:   http://localhost:${port}`);
+if (networkIP) console.log(`  Network: http://${networkIP}:${port}`);
 
 const child = spawn(nextBin, args, {
   stdio: "inherit",

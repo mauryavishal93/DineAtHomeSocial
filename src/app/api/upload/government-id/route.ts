@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from "@/server/auth/rbac";
 import { connectMongo } from "@/server/db/mongoose";
 import { HostProfile } from "@/server/models/HostProfile";
 import { serverError } from "@/server/http/response";
+import { isConvertibleImage, processImageToWebp } from "@/server/utils/imageProcessor";
 
 export const runtime = "nodejs";
 
@@ -48,14 +49,26 @@ export async function POST(req: NextRequest) {
     }
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    let buffer = Buffer.from(bytes);
+    let extension = file.name.split(".").pop() || (file.type === "application/pdf" ? "pdf" : "jpg");
+    let fileMime = file.type;
+
+    // Convert images to WebP (PDFs stay as-is)
+    if (isConvertibleImage(file.type)) {
+      try {
+        const result = await processImageToWebp(buffer, file.type);
+        buffer = result.buffer;
+        extension = result.extension;
+        fileMime = result.mime;
+      } catch (err) {
+        console.warn("[Upload Government ID] Image conversion failed, saving original:", err);
+      }
+    }
 
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 15);
-    const extension = file.name.split(".").pop() || (file.type === "application/pdf" ? "pdf" : "jpg");
     const fileName = `gov-id-${ctx.userId}-${timestamp}-${randomStr}.${extension}`;
     const filePath = join(GOVERNMENT_ID_DIR, fileName);
-
     await writeFile(filePath, buffer);
 
     const relativePath = `government-ids/${fileName}`;
@@ -73,7 +86,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       filePath: relativePath,
-      fileMime: file.type,
+      fileMime,
       fileName: file.name
     });
   } catch (e) {

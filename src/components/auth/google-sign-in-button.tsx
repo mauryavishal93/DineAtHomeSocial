@@ -8,6 +8,7 @@ import { setSession } from "@/lib/session";
 
 interface GoogleSignInButtonProps {
   role: "GUEST" | "HOST";
+  variant?: "signin" | "signup";
   onSuccess?: () => void;
   onError?: (error: string) => void;
 }
@@ -43,7 +44,7 @@ declare global {
   }
 }
 
-export function GoogleSignInButton({ role, onSuccess, onError }: GoogleSignInButtonProps) {
+export function GoogleSignInButton({ role, variant = "signin", onSuccess, onError }: GoogleSignInButtonProps) {
   const [loading, setLoading] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const router = useRouter();
@@ -175,11 +176,11 @@ export function GoogleSignInButton({ role, onSuccess, onError }: GoogleSignInBut
         <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
         <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
       </svg>
-      <span>${loading ? "Signing in..." : role === "HOST" ? "Sign in with google as Host" : "Sign in with google as Guest"}</span>
+      <span>${loading ? (variant === "signup" ? "Signing up..." : "Signing in...") : variant === "signup" ? (role === "HOST" ? "Sign up with Google as Host" : "Sign up with Google as Guest") : (role === "HOST" ? "Sign in with Google as Host" : "Sign in with Google as Guest")}</span>
     `;
     customButton.onclick = handleButtonClick;
     buttonRef.current.appendChild(customButton);
-  }, [loading, role, handleButtonClick]);
+  }, [loading, role, variant, handleButtonClick]);
 
   return <div ref={buttonRef} className="w-full" />;
 }

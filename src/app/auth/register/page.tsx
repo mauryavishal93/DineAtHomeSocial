@@ -17,13 +17,23 @@ export default function RegisterPage() {
         <p className="mt-2 text-sm text-ink-700">
           Choose Guest or Host. Admin users are created manually.
         </p>
-        <div className="mt-6 grid gap-4 rounded-3xl border border-sand-200 bg-white/60 p-6 shadow-card backdrop-blur">
-          <Button size="lg" asChild>
-            <Link href="/auth/register/guest">Create Guest account</Link>
-          </Button>
-          <Button size="lg" variant="outline" asChild>
-            <Link href="/auth/register/host">Create Host account</Link>
-          </Button>
+        <div className="mt-6 rounded-3xl border border-sand-200 bg-white/60 p-6 shadow-card backdrop-blur">
+          <div className="grid gap-4">
+            <Button size="lg" asChild>
+              <Link href="/auth/register/guest">Create Guest account</Link>
+            </Button>
+            <Button size="lg" variant="outline" asChild>
+              <Link href="/auth/register/host">Create Host account</Link>
+            </Button>
+          </div>
+          <div className="mt-6 pt-4 border-t border-sand-200 flex flex-col items-center">
+            <p className="text-center text-sm text-ink-600 mb-3">
+              Already have an account?
+            </p>
+            <Button className="w-full" asChild>
+              <Link href="/auth/login">Login</Link>
+            </Button>
+          </div>
         </div>
       </Container>
     </main>

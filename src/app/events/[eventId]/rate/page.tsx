@@ -19,6 +19,15 @@ type Host = {
   hostName: string;
   venueName: string;
   alreadyRated: boolean;
+  /** When alreadyRated, the last rating given (read-only) */
+  existingRating?: {
+    eventRating: number;
+    venueRating: number;
+    foodRating: number;
+    hospitalityRating: number;
+    comment: string;
+    ratedAt: string;
+  };
 };
 
 type EligibilityResponse = {
@@ -290,8 +299,33 @@ export default function RateEventPage(props: { params: Promise<{ eventId: string
             </h2>
             
             {eligibility.host.alreadyRated ? (
-              <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-green-800">
-                You have already rated this host ✓
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-emerald-800">
+                  <p className="font-medium">✓ You have already rated this host</p>
+                  <p className="text-sm mt-1 opacity-90">
+                    {eligibility.host.existingRating?.ratedAt
+                      ? `Your rating from ${new Date(eligibility.host.existingRating.ratedAt).toLocaleDateString(undefined, { dateStyle: "medium" })} — you cannot rate again.`
+                      : "You cannot rate again."}
+                  </p>
+                </div>
+                {eligibility.host.existingRating && (
+                  <div className="rounded-2xl border border-sand-200 bg-sand-50/50 p-5 space-y-4">
+                    <p className="text-sm font-medium text-ink-900">Host: {eligibility.host.hostName}</p>
+                    <p className="text-sm text-ink-700">Venue: {eligibility.host.venueName}</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div><label className="text-xs font-medium text-ink-600">Event Quality</label><div className="mt-1"><StarRating readonly value={eligibility.host.existingRating.eventRating} /></div></div>
+                      <div><label className="text-xs font-medium text-ink-600">Venue</label><div className="mt-1"><StarRating readonly value={eligibility.host.existingRating.venueRating} /></div></div>
+                      <div><label className="text-xs font-medium text-ink-600">Food Quality</label><div className="mt-1"><StarRating readonly value={eligibility.host.existingRating.foodRating} /></div></div>
+                      <div><label className="text-xs font-medium text-ink-600">Hospitality</label><div className="mt-1"><StarRating readonly value={eligibility.host.existingRating.hospitalityRating} /></div></div>
+                    </div>
+                    {eligibility.host.existingRating.comment && (
+                      <div>
+                        <label className="text-xs font-medium text-ink-600">Your comment</label>
+                        <p className="mt-1 text-sm text-ink-700 rounded-xl bg-white p-3 border border-sand-200">{eligibility.host.existingRating.comment}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-6">
