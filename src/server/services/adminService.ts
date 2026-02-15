@@ -641,10 +641,17 @@ export interface AdminEventDetail {
     name: string;
     address: string;
     locality: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postalCode?: string;
     description: string;
     foodCategories: string[];
     gamesAvailable: string[];
     images: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>;
+    geo?: {
+      coordinates?: number[]; // [longitude, latitude]
+    };
   };
   bookings: Array<{
     _id: string;
@@ -830,20 +837,32 @@ export async function getAdminEventDetail(eventId: string): Promise<AdminEventDe
           name: venue.name,
           address: venue.address,
           locality: venue.locality || "",
+          city: venue.city || "",
+          state: venue.state || "",
+          country: venue.country || "",
+          postalCode: venue.postalCode || "",
           description: venue.description || "",
           foodCategories: venue.foodCategories || [],
           gamesAvailable: venue.gamesAvailable || [],
-          images: venue.images || []
+          images: venue.images || [],
+          geo: venue.geo && venue.geo.coordinates && venue.geo.coordinates.length === 2
+            ? { coordinates: venue.geo.coordinates }
+            : undefined
         }
       : {
           _id: "",
           name: "",
           address: "",
           locality: "",
+          city: "",
+          state: "",
+          country: "",
+          postalCode: "",
           description: "",
           foodCategories: [],
           gamesAvailable: [],
-          images: []
+          images: [],
+          geo: undefined
         },
     bookings: bookingsWithDetails,
     summary: {
@@ -965,6 +984,22 @@ export async function cancelBooking(bookingId: string, adminId: string, adminUse
   if (event) {
     (event as any).seatsRemaining += (booking as any).seats;
     await event.save();
+  }
+
+  // Invalidate all event passes for this booking
+  const { EventPass } = await import("@/server/models/EventPass");
+  try {
+    await EventPass.updateMany(
+      { bookingId: booking._id },
+      {
+        $set: {
+          isValid: false
+        }
+      }
+    );
+  } catch (passError) {
+    console.error("Failed to invalidate event passes:", passError);
+    // Continue even if pass invalidation fails
   }
 
   // Log admin action

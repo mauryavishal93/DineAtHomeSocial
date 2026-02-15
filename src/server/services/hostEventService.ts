@@ -179,6 +179,22 @@ export async function cancelEventByHost(
     }
   );
 
+  // Invalidate all event passes for cancelled bookings
+  const { EventPass } = await import("@/server/models/EventPass");
+  try {
+    await EventPass.updateMany(
+      { bookingId: { $in: bookingIds } },
+      {
+        $set: {
+          isValid: false
+        }
+      }
+    );
+  } catch (passError) {
+    console.error("Failed to invalidate event passes:", passError);
+    // Continue even if pass invalidation fails
+  }
+
   // Create notifications for all guests who had bookings
   const notifications = bookings.map((booking: any) => ({
     userId: booking.guestUserId,

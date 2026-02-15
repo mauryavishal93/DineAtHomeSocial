@@ -113,7 +113,8 @@ export async function loginUser(input: { email: string; password: string }) {
     accessToken,
     refreshToken,
     role: user.role,
-    status: user.status
+    status: user.status,
+    userId: String(user._id)
   };
 }
 

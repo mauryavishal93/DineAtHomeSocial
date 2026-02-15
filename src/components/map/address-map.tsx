@@ -214,8 +214,9 @@ export function AddressMap({
     // Update previous address
     previousAddressRef.current = currentAddress;
     
-    // Don't auto-geocode if address is too short (less than 10 characters)
-    if (!currentAddress || currentAddress.length < 10) {
+    // Don't auto-geocode if address is too short (less than 5 characters)
+    // Reduced threshold to allow more addresses to be geocoded
+    if (!currentAddress || currentAddress.length < 5) {
       return;
     }
 
@@ -278,14 +279,26 @@ export function AddressMap({
           postalCode: postalCode || ""
         });
         setGeocodeError(null);
+        console.log("[AddressMap] Successfully geocoded address:", formattedAddress);
       } else if (!res.ok) {
         const errorMsg = res.error || "Failed to find location. Please try a more specific address.";
         setGeocodeError(errorMsg);
-        console.error("Geocoding API error:", res.error);
+        console.warn("Geocoding API error:", res.error);
+        // Don't clear marker if we already have one - allow user to manually adjust
+        if (!markerPosition) {
+          setMarkerPosition(null);
+        }
+        // Show helpful message that user can click on map
+        console.log("[AddressMap] User can click on map to select location manually");
       }
     } catch (error) {
-      setGeocodeError("Failed to geocode address. Please try again.");
+      const errorMsg = "Failed to geocode address. You can click on the map to select a location manually.";
+      setGeocodeError(errorMsg);
       console.error("Geocoding error:", error);
+      // Don't clear marker if we already have one
+      if (!markerPosition) {
+        setMarkerPosition(null);
+      }
     } finally {
       setIsGeocoding(false);
     }
@@ -399,8 +412,8 @@ export function AddressMap({
               }}
             >
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
               />
               {markerPosition && (
                 <Marker position={markerPosition}>
@@ -420,14 +433,6 @@ export function AddressMap({
             </div>
           ) : null}
         </div>
-        <a
-          href={`https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}&zoom=15`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-ink-600 hover:text-ink-900 inline-block"
-        >
-          View on OpenStreetMap →
-        </a>
       </div>
     );
   }
@@ -472,7 +477,12 @@ export function AddressMap({
           </button>
         </div>
         {geocodeError && (
-          <p className="mt-1 text-xs text-red-600">{geocodeError}</p>
+          <div className="mt-1 p-2 rounded-lg bg-red-50 border border-red-200">
+            <p className="text-xs text-red-700 font-medium">{geocodeError}</p>
+            <p className="text-xs text-red-600 mt-1">
+              Tip: You can also click directly on the map below to select a location manually.
+            </p>
+          </div>
         )}
         {isGeocoding && (
           <p className="mt-1 text-xs text-ink-600">Searching location...</p>
@@ -481,7 +491,7 @@ export function AddressMap({
           <p className="mt-1 text-xs text-ink-600">Getting address for selected location...</p>
         )}
         <p className="mt-1 text-xs text-ink-600">
-          Enter your address above and click "Get Location", or click on the map to select a location.
+          Enter your address above and click "Get Location", or click on the map to select a location manually.
         </p>
       </div>
 
@@ -513,8 +523,8 @@ export function AddressMap({
             }}
           >
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             />
             {markerPosition && (
               <Marker position={markerPosition}>
@@ -535,16 +545,6 @@ export function AddressMap({
           </div>
         ) : null}
       </div>
-      {markerPosition && (
-        <a
-          href={`https://www.openstreetmap.org/?mlat=${(markerPosition as [number, number])[0]}&mlon=${(markerPosition as [number, number])[1]}&zoom=15`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-ink-600 hover:text-ink-900 inline-block"
-        >
-          Open in OpenStreetMap →
-        </a>
-      )}
     </div>
   );
 }

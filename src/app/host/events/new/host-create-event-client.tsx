@@ -11,10 +11,21 @@ import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import dynamic from "next/dynamic";
 
 import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
 import { rupeesToPaise } from "@/lib/currency";
+
+// Dynamically import AddressMap to avoid SSR issues with Leaflet
+const AddressMap = dynamic(() => import("@/components/map/address-map").then((mod) => mod.AddressMap), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-64 rounded-lg border border-sand-200 bg-sand-100 flex items-center justify-center text-sm text-ink-600">
+      Loading map...
+    </div>
+  )
+});
 
 const schema = z.object({
   eventName: z.string().min(1).max(120),
@@ -41,6 +52,8 @@ export default function HostCreateEventClient() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [serverOk, setServerOk] = useState<string | null>(null);
   const [venueAddress, setVenueAddress] = useState<string>("");
+  const [venueLatitude, setVenueLatitude] = useState<number | null>(null);
+  const [venueLongitude, setVenueLongitude] = useState<number | null>(null);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [selectedVideos, setSelectedVideos] = useState<File[]>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -89,22 +102,28 @@ export default function HostCreateEventClient() {
         venueAddress: string;
         cuisines: string[];
         activities: string[];
+        latitude?: number | null;
+        longitude?: number | null;
       }>("/api/host/profile", {
         method: "GET",
         headers: { authorization: `Bearer ${token}` }
       });
       if (!res.ok) return;
       setVenueAddress(res.data.venueAddress ?? "");
+      setVenueLatitude(res.data.latitude ?? null);
+      setVenueLongitude(res.data.longitude ?? null);
       setValue("cuisines", (res.data.cuisines ?? []).join(", "));
       setValue("activities", (res.data.activities ?? []).join(", "));
     })();
   }, [role, router, setValue, token]);
 
-  const mapSrc = useMemo(() => {
-    const q = encodeURIComponent(venueAddress || "");
-    if (!q) return null;
-    return `https://www.google.com/maps?q=${q}&output=embed`;
-  }, [venueAddress]);
+  const handleLocationSelect = (address: string, lat: number, lng: number) => {
+    setVenueLatitude(lat);
+    setVenueLongitude(lng);
+    if (address && address !== venueAddress) {
+      setVenueAddress(address);
+    }
+  };
 
   const onSubmit = useMemo(
     () =>
@@ -266,9 +285,15 @@ export default function HostCreateEventClient() {
               <div className="mt-1 text-ink-700">{venueAddress || "Missing venue address (complete host setup)."}</div>
             </div>
 
-            {mapSrc ? (
-              <div className="overflow-hidden rounded-2xl border border-sand-200 bg-white/60">
-                <iframe title="Map preview" src={mapSrc} className="h-56 w-full" loading="lazy" />
+            {venueAddress ? (
+              <div className="rounded-2xl border border-sand-200 bg-white/60 overflow-hidden">
+                <AddressMap
+                  address={venueAddress}
+                  latitude={venueLatitude}
+                  longitude={venueLongitude}
+                  editable={false}
+                  onLocationSelect={handleLocationSelect}
+                />
               </div>
             ) : null}
 

@@ -28,7 +28,11 @@ const envSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   UPLOAD_DIR: z.string().default("./uploads"),
-  NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: z.string().optional()
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  CLEANUP_SECRET: z.string().optional(),
+  ADMIN_INIT_SECRET: z.string().optional()
 });
 
 export const env = envSchema.parse(process.env);

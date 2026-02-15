@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -13,6 +14,17 @@ import { Alert } from "@/components/ui/alert";
 
 import { apiFetch } from "@/lib/http";
 import { setSession } from "@/lib/session";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+
+// Dynamically import AddressMap to avoid SSR issues with Leaflet
+const AddressMap = dynamic(() => import("@/components/map/address-map").then((mod) => mod.AddressMap), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-64 rounded-lg border border-sand-200 bg-sand-100 flex items-center justify-center text-sm text-ink-600">
+      Loading map...
+    </div>
+  )
+});
 
 const AGE_OPTIONS = Array.from({ length: 100 }, (_, i) => i);
 
@@ -45,11 +57,14 @@ export function HostRegisterForm() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [serverOk, setServerOk] = useState<string | null>(null);
   const router = useRouter();
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
 
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isSubmitting }
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -58,6 +73,18 @@ export function HostRegisterForm() {
 
   const address = watch("address");
 
+  const handleLocationSelect = useMemo(
+    () => (addr: string, lat: number, lng: number) => {
+      setLatitude(lat);
+      setLongitude(lng);
+      // Update address if it changed
+      if (addr && addr !== address) {
+        setValue("address", addr);
+      }
+    },
+    [address, setValue]
+  );
+
   const onSubmit = useMemo(
     () =>
       handleSubmit(async (values) => {
@@ -65,7 +92,17 @@ export function HostRegisterForm() {
         setServerOk(null);
 
         // values are already validated/transformed by zodResolver
-        const payload = values as z.output<typeof schema>;
+        const payload = values as z.output<typeof schema> & {
+          latitude?: number | null;
+          longitude?: number | null;
+        };
+        
+        // Include coordinates if available
+        if (latitude !== null && longitude !== null) {
+          payload.latitude = latitude;
+          payload.longitude = longitude;
+        }
+        
         const res = await apiFetch<{ userId: string }>("/api/auth/register", {
           method: "POST",
           body: JSON.stringify(payload)
@@ -92,19 +129,30 @@ export function HostRegisterForm() {
         setServerOk("Account created. Redirecting to profile…");
         router.push("/profile");
       }),
-    [handleSubmit, router]
+    [handleSubmit, router, latitude, longitude]
   );
 
-  const mapSrc = useMemo(() => {
-    const q = encodeURIComponent(address || "");
-    if (!q) return null;
-    return `https://www.google.com/maps?q=${q}&output=embed`;
-  }, [address]);
-
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      {serverError ? <Alert title="Registration failed" desc={serverError} /> : null}
-      {serverOk ? <Alert title="Success" desc={serverOk} /> : null}
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <GoogleSignInButton 
+          role="HOST" 
+          onError={(error) => setServerError(error)}
+        />
+      </div>
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-sand-200"></div>
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-white px-2 text-ink-500">Or create account with email</span>
+        </div>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-4">
+        {serverError ? <Alert title="Registration failed" desc={serverError} /> : null}
+        {serverOk ? <Alert title="Success" desc={serverOk} /> : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Input
@@ -141,16 +189,21 @@ export function HostRegisterForm() {
         error={errors.address?.message}
       />
 
-      {mapSrc ? (
-        <div className="overflow-hidden rounded-2xl border border-sand-200 bg-white/60">
-          <iframe
-            title="Map preview"
-            src={mapSrc}
-            className="h-56 w-full"
-            loading="lazy"
+      {address && address.trim().length > 0 ? (
+        <div className="rounded-lg border border-sand-200 overflow-hidden">
+          <AddressMap
+            address={address}
+            latitude={latitude}
+            longitude={longitude}
+            onLocationSelect={handleLocationSelect}
+            editable={true}
           />
         </div>
-      ) : null}
+      ) : (
+        <div className="rounded-lg border border-sand-200 bg-sand-50 p-8 text-center text-sm text-ink-600">
+          Enter a venue address above to see it on the map
+        </div>
+      )}
 
       <Input
         label="Interests (optional)"
@@ -194,10 +247,11 @@ export function HostRegisterForm() {
         error={errors.password?.message}
       />
 
-      <Button type="submit" disabled={isSubmitting}>
+      <Button type="submit" disabled={isSubmitting} className="w-full">
         {isSubmitting ? "Creating..." : "Create Host account"}
       </Button>
-    </form>
+      </form>
+    </div>
   );
 }
 

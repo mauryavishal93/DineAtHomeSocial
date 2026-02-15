@@ -69,8 +69,7 @@ export async function GET(req: Request) {
       return badRequest("Address parameter is required for forward geocoding");
     }
 
-    // Use a free geocoding service (Nominatim/OpenStreetMap)
-    // This doesn't require an API key
+    // Use Nominatim geocoding service (free, no API key required)
     const encodedAddress = encodeURIComponent(address.trim());
     
     try {
@@ -122,9 +121,56 @@ export async function GET(req: Request) {
         });
       }
 
-      // If no results, try a more flexible search
+      // If no results, try a more flexible search with different strategies
       console.warn("No results found for address:", address);
-      return badRequest(`Address not found. Please try a more specific address or include city/state.`);
+      
+      // Try a more flexible search with country hint (India)
+      try {
+        const flexibleResponse = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=5&addressdetails=1&countrycodes=in`,
+          {
+            headers: {
+              "User-Agent": "DineAtHomeSocial/1.0 (contact@dineathomesocial.com)"
+            }
+          }
+        );
+
+        if (flexibleResponse.ok) {
+          const flexibleData = await flexibleResponse.json();
+          if (flexibleData && Array.isArray(flexibleData) && flexibleData.length > 0) {
+            const result = flexibleData[0];
+            const addr = result.address || {};
+            
+            const formattedAddress = result.display_name || address;
+            const city = addr.city || addr.town || addr.village || addr.city_district || addr.county || "";
+            const state = addr.state || addr.region || addr.state_district || "";
+            const country = addr.country || "";
+            const postalCode = addr.postcode || "";
+            const locality = addr.suburb || addr.neighbourhood || addr.locality || addr.city_district || city || "";
+            
+            const lat = parseFloat(result.lat);
+            const lon = parseFloat(result.lon);
+            
+            if (!isNaN(lat) && !isNaN(lon)) {
+              console.log("Found address with flexible search");
+              return ok({
+                latitude: lat,
+                longitude: lon,
+                formattedAddress,
+                city,
+                state,
+                country,
+                postalCode,
+                locality
+              });
+            }
+          }
+        }
+      } catch (flexibleError) {
+        console.warn("Flexible geocoding search failed:", flexibleError);
+      }
+      
+      return badRequest(`Address not found. Please try a more specific address or include city/state. You can also click on the map to select a location manually.`);
     } catch (fetchError) {
       console.error("Geocoding fetch error:", fetchError);
       const errorMsg = fetchError instanceof Error ? fetchError.message : "Unknown error";

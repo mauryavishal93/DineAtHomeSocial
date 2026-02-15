@@ -46,12 +46,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       try {
         // Fetch notifications count
-        const notifRes = await apiFetch<{ notifications: any[] }>("/api/notifications", {
+        const notifRes = await apiFetch<{ notifications: any[]; unreadCount?: number }>("/api/notifications", {
           headers: { authorization: `Bearer ${token}` }
         });
-        if (notifRes.ok) {
-          const unread = notifRes.data.notifications.filter((n: any) => !n.isRead).length;
+        if (notifRes.ok && notifRes.data) {
+          // Use unreadCount if available, otherwise calculate from notifications
+          const unread = notifRes.data.unreadCount ?? (notifRes.data.notifications?.filter((n: any) => !n.isRead).length ?? 0);
           setUnreadNotifications(unread);
+        } else if (!notifRes.ok) {
+          // If notifications API fails, just set to 0 - don't break the app
+          console.warn("Failed to fetch notifications:", notifRes.error);
+          setUnreadNotifications(0);
         }
 
         // Fetch messages count (conversations with unread messages)
@@ -61,9 +66,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         if (msgRes.ok) {
           const totalUnread = msgRes.data.conversations.reduce((sum: number, c: any) => sum + (c.unreadCount || 0), 0);
           setUnreadMessages(totalUnread);
+        } else if (!msgRes.ok) {
+          // If messages API fails, just set to 0 - don't break the app
+          console.warn("Failed to fetch messages:", msgRes.error);
+          setUnreadMessages(0);
         }
       } catch (error) {
         console.error("Error fetching notification/message counts:", error);
+        // Set to 0 on error to prevent UI issues
+        setUnreadNotifications(0);
+        setUnreadMessages(0);
       }
     };
 

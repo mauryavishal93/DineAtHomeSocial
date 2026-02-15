@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { requireAuth, requireRole } from "@/server/auth/rbac";
 import { connectMongo } from "@/server/db/mongoose";
 import { EventSlot } from "@/server/models/EventSlot";
+import { Booking } from "@/server/models/Booking";
 import { getEventPassByCode, validateEventPass } from "@/server/services/eventPassService";
 import { createResponse } from "@/server/http/response";
 import { z } from "zod";
@@ -53,6 +54,16 @@ export async function POST(req: NextRequest) {
       return createResponse({ 
         error: "Event code does not match this event",
         valid: false 
+      }, { status: 400 });
+    }
+
+    // Check if booking is cancelled
+    const booking = await Booking.findById(pass.bookingId).lean();
+    if (booking && (booking as any).status === "CANCELLED") {
+      return createResponse({ 
+        error: "This event pass is invalid because the booking has been cancelled",
+        valid: false,
+        guestName: pass.guestName
       }, { status: 400 });
     }
 

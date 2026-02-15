@@ -13,6 +13,7 @@ import { Alert } from "@/components/ui/alert";
 
 import { apiFetch } from "@/lib/http";
 import { setSession } from "@/lib/session";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 
 const AGE_OPTIONS = Array.from({ length: 100 }, (_, i) => i);
 const GENDER_OPTIONS = ["Male", "Female", "Other"] as const;
@@ -91,9 +92,26 @@ export function GuestRegisterForm() {
   );
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      {serverError ? <Alert title="Registration failed" desc={serverError} /> : null}
-      {serverOk ? <Alert title="Success" desc={serverOk} /> : null}
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <GoogleSignInButton 
+          role="GUEST" 
+          onError={(error) => setServerError(error)}
+        />
+      </div>
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-sand-200"></div>
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-white px-2 text-ink-500">Or create account with email</span>
+        </div>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-4">
+        {serverError ? <Alert title="Registration failed" desc={serverError} /> : null}
+        {serverOk ? <Alert title="Success" desc={serverOk} /> : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Input
@@ -152,10 +170,11 @@ export function GuestRegisterForm() {
         error={errors.password?.message}
       />
 
-      <Button type="submit" disabled={isSubmitting}>
+      <Button type="submit" disabled={isSubmitting} className="w-full">
         {isSubmitting ? "Creating..." : "Create Guest account"}
       </Button>
-    </form>
+      </form>
+    </div>
   );
 }
 
