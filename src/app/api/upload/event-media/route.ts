@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from "@/server/auth/rbac";
 import { connectMongo } from "@/server/db/mongoose";
 import { EventSlot } from "@/server/models/EventSlot";
 import { serverError } from "@/server/http/response";
+import { isConvertibleImage, processImageToWebp } from "@/server/utils/imageProcessor";
 
 export const runtime = "nodejs";
 
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     const uploadedImages: Array<{ filePath: string; fileMime: string; fileName: string }> = [];
     const uploadedVideos: Array<{ filePath: string; fileMime: string; fileName: string }> = [];
 
-    // Upload images
+    // Upload images: convert to WebP and compress
     for (const file of imageFiles) {
       if (!file.type.startsWith("image/")) {
         continue;
@@ -66,17 +67,29 @@ export async function POST(req: NextRequest) {
 
       const timestamp = Date.now();
       const randomStr = Math.random().toString(36).substring(2, 15);
-      const extension = file.name.split(".").pop() || "jpg";
+      let outBuffer = buffer;
+      let extension = file.name.split(".").pop() || "jpg";
+      let mime = file.type;
+
+      if (isConvertibleImage(file.type)) {
+        try {
+          const result = await processImageToWebp(buffer, file.type);
+          outBuffer = result.buffer;
+          extension = result.extension;
+          mime = result.mime;
+        } catch (err) {
+          console.warn("[Upload Event Media] Image conversion failed, saving original:", err);
+        }
+      }
+
       const fileName = `event-${eventId}-${timestamp}-${randomStr}.${extension}`;
       const filePath = join(EVENT_IMAGES_DIR, fileName);
-
-      await writeFile(filePath, buffer);
+      await writeFile(filePath, outBuffer);
 
       const relativePath = `event-images/${fileName}`;
-
       uploadedImages.push({
         filePath: relativePath,
-        fileMime: file.type,
+        fileMime: mime,
         fileName: file.name
       });
     }

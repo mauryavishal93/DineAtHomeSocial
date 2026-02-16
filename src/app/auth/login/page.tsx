@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { LoginForm } from "@/components/forms/login-form";
 import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   return (
@@ -18,6 +20,14 @@ export default function LoginPage() {
         </p>
         <div className="mt-6 rounded-3xl border border-sand-200 bg-white/60 p-6 shadow-card backdrop-blur">
           <LoginForm />
+          <div className="mt-6 pt-4 border-t border-sand-200 flex flex-col items-center">
+            <p className="text-center text-sm text-ink-600 mb-3">
+              Don&apos;t have an account?
+            </p>
+            <Button className="w-full" asChild>
+              <Link href="/auth/register">Sign up</Link>
+            </Button>
+          </div>
         </div>
       </Container>
     </main>

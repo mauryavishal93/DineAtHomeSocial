@@ -484,12 +484,12 @@ export default function EventDetailPage({
           </Link>
         </div>
 
-        <div className="grid gap-8 md:grid-cols-[1.6fr_1fr]">
-          <div className="space-y-6">
-            <div className="overflow-hidden rounded-3xl border border-sand-200 bg-white/60 shadow-card backdrop-blur">
+        <div className="grid gap-6 md:gap-8 grid-cols-1 md:grid-cols-[1.6fr_1fr]">
+          <div className="space-y-6 min-w-0">
+            <div className="overflow-hidden rounded-2xl sm:rounded-3xl border border-sand-200 bg-white/60 shadow-card backdrop-blur">
               {/* Media Slideshow */}
               {(eventImages.length > 0 || eventVideos.length > 0) ? (
-                <div className="relative h-72 w-full overflow-hidden">
+                <div className="relative h-56 sm:h-72 w-full overflow-hidden">
                   {/* Slides */}
                   <div className="relative h-full w-full">
                     {[...eventImages, ...eventVideos].map((media, idx) => (

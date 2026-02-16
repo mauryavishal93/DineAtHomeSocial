@@ -13,6 +13,7 @@ import { Alert } from "@/components/ui/alert";
 
 import { apiFetch } from "@/lib/http";
 import { setSession } from "@/lib/session";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 
 const AGE_OPTIONS = Array.from({ length: 100 }, (_, i) => i);
 const GENDER_OPTIONS = ["Male", "Female", "Other"] as const;
@@ -32,7 +33,7 @@ const schema = z.object({
   age: z.coerce.number().int().min(0).max(99),
   gender: z.enum(GENDER_OPTIONS),
   email: z.string().email(),
-  mobile: z.string().min(8).max(20),
+  mobile: z.string().regex(/^\d{10}$/, "Mobile must be exactly 10 digits"),
   password: z.string().min(8),
   interests: listFromCsv.optional()
 });
@@ -91,9 +92,27 @@ export function GuestRegisterForm() {
   );
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      {serverError ? <Alert title="Registration failed" desc={serverError} /> : null}
-      {serverOk ? <Alert title="Success" desc={serverOk} /> : null}
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <GoogleSignInButton
+          role="GUEST"
+          variant="signup"
+          onError={(error) => setServerError(error)}
+        />
+      </div>
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-sand-200"></div>
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-white px-2 text-ink-500">Or create account with email</span>
+        </div>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-4">
+        {serverError ? <Alert title="Registration failed" desc={serverError} /> : null}
+        {serverOk ? <Alert title="Success" desc={serverOk} /> : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Input
@@ -134,7 +153,9 @@ export function GuestRegisterForm() {
       />
       <Input
         label="Mobile"
-        placeholder="+91..."
+        placeholder="10-digit number"
+        maxLength={10}
+        inputMode="numeric"
         {...register("mobile")}
         error={errors.mobile?.message}
       />
@@ -152,10 +173,11 @@ export function GuestRegisterForm() {
         error={errors.password?.message}
       />
 
-      <Button type="submit" disabled={isSubmitting}>
+      <Button type="submit" disabled={isSubmitting} className="w-full">
         {isSubmitting ? "Creating..." : "Create Guest account"}
       </Button>
-    </form>
+      </form>
+    </div>
   );
 }
 

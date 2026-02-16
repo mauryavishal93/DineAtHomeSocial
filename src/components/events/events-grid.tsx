@@ -119,7 +119,7 @@ export function EventsGrid({ filters }: EventsGridProps = {}) {
   }
 
   return (
-    <div className="grid gap-5 md:grid-cols-2">
+    <div className="grid gap-4 sm:gap-5 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
       {events.map((ev) => (
         <EventCard key={ev.id} ev={ev} />
       ))}

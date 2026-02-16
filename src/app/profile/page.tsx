@@ -12,17 +12,6 @@ import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import dynamic from "next/dynamic";
-
-// Dynamically import AddressMap to avoid SSR issues with Leaflet
-const AddressMap = dynamic(() => import("@/components/map/address-map").then((mod) => mod.AddressMap), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-64 rounded-lg border border-sand-200 bg-sand-100 flex items-center justify-center text-sm text-ink-600">
-      Loading map...
-    </div>
-  )
-});
 
 import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
@@ -704,38 +693,6 @@ export default function ProfilePage() {
                   onChange={(e) => setPostalCode(e.target.value)}
                 />
 
-                {/* Map Location Section */}
-                <div>
-                  <label className="block text-sm font-medium text-ink-700 mb-2">
-                    Map Location
-                  </label>
-                  <AddressMap
-                    address={hostForm.watch("venueAddress") || ""}
-                    latitude={latitude}
-                    longitude={longitude}
-                    editable={isEditing}
-                    onLocationSelect={(address, lat, lng, addressComponents) => {
-                      setLatitude(lat);
-                      setLongitude(lng);
-                      // Update address if geocoded address is different
-                      if (address && address !== hostForm.watch("venueAddress")) {
-                        hostForm.setValue("venueAddress", address);
-                      }
-                      // Update address components if provided
-                      if (addressComponents) {
-                        if (addressComponents.locality) setLocality(addressComponents.locality);
-                        if (addressComponents.city) setCity(addressComponents.city);
-                        if (addressComponents.state) setState(addressComponents.state);
-                        if (addressComponents.country) setCountry(addressComponents.country);
-                        if (addressComponents.postalCode) setPostalCode(addressComponents.postalCode);
-                      }
-                    }}
-                  />
-                  <p className="mt-1 text-xs text-ink-600">
-                    Enter your address above and click "Get Location" to select the location on the map. The map will automatically update when you enter an address.
-                  </p>
-                </div>
-
                 <Input
                   label="Cuisine served"
                   placeholder="Comma separated (e.g. North Indian, Vegan)"
@@ -834,21 +791,6 @@ export default function ProfilePage() {
                   </>
                 )}
 
-                {/* Map Location in View Mode */}
-                {(latitude !== null && longitude !== null) || hostForm.watch("venueAddress") ? (
-                  <div>
-                    <div className="text-xs font-medium uppercase tracking-wide text-ink-600 mb-2">Map Location</div>
-                    <AddressMap
-                      address={hostForm.watch("venueAddress") || ""}
-                      latitude={latitude}
-                      longitude={longitude}
-                      editable={false}
-                      onLocationSelect={() => {
-                        // No-op in view mode
-                      }}
-                    />
-                  </div>
-                ) : null}
                 <div>
                   <div className="text-xs font-medium uppercase tracking-wide text-ink-600">Cuisines</div>
                   <div className="mt-1 flex flex-wrap gap-2">

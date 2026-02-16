@@ -134,12 +134,12 @@ export default function EventsPage() {
   ]);
 
   return (
-    <main className="py-10">
+    <main className="py-6 sm:py-10">
       <Container>
-        <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-2 flex-1">
+        <div className="flex flex-col gap-4 sm:gap-6 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-2 flex-1 min-w-0">
             <div className="text-sm font-medium text-ink-700">Explore</div>
-            <h1 className="font-display text-4xl tracking-tight text-ink-900">
+            <h1 className="font-display text-2xl sm:text-4xl tracking-tight text-ink-900">
               Events near you
             </h1>
             <p className="max-w-2xl text-sm text-ink-700">
@@ -160,8 +160,8 @@ export default function EventsPage() {
           </div>
         </div>
 
-        <div className="mt-8 grid gap-6 md:grid-cols-[320px_1fr]">
-          <aside className="h-fit rounded-2xl border border-sand-200 bg-white/50 p-5 shadow-soft backdrop-blur max-h-[calc(100vh-200px)] overflow-y-auto">
+        <div className="mt-6 sm:mt-8 grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-[280px_1fr] lg:grid-cols-[320px_1fr]">
+          <aside className="h-fit rounded-2xl border border-sand-200 bg-white/50 p-4 sm:p-5 shadow-soft backdrop-blur md:max-h-[calc(100vh-200px)] overflow-y-auto">
             <div className="space-y-5">
               <div className="font-medium text-ink-900">Filters</div>
               

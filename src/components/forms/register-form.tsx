@@ -23,14 +23,14 @@ const guestSchema = z.object({
   gender: z.enum(GENDER_OPTIONS),
   email: z.string().email(),
   password: z.string().min(8),
-  mobile: z.string().min(8).max(20)
+  mobile: z.string().regex(/^\d{10}$/, "Mobile must be exactly 10 digits")
 });
 
 const hostSchema = z.object({
   role: z.literal("HOST"),
   email: z.string().email(),
   password: z.string().min(8),
-  mobile: z.string().min(8).max(20)
+  mobile: z.string().regex(/^\d{10}$/, "Mobile must be exactly 10 digits")
 });
 
 const schema = z.discriminatedUnion("role", [guestSchema, hostSchema]);
@@ -167,7 +167,9 @@ export function RegisterForm() {
 
       <Input
         label="Mobile"
-        placeholder="+91..."
+        placeholder="10-digit number"
+        maxLength={10}
+        inputMode="numeric"
         {...register("mobile")}
         error={errors.mobile?.message}
       />

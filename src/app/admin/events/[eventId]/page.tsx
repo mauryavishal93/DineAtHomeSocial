@@ -6,8 +6,19 @@ import Link from "next/link";
 import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import dynamic from "next/dynamic";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken } from "@/lib/session";
+
+// Dynamically import AddressMap to avoid SSR issues with Leaflet
+const AddressMap = dynamic(() => import("@/components/map/address-map").then((mod) => mod.AddressMap), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-64 rounded-lg border border-sand-200 bg-sand-100 flex items-center justify-center text-sm text-ink-600">
+      Loading map...
+    </div>
+  )
+});
 
 interface AdminEventDetail {
   event: {
@@ -61,10 +72,17 @@ interface AdminEventDetail {
     name: string;
     address: string;
     locality: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postalCode?: string;
     description: string;
     foodCategories: string[];
     gamesAvailable: string[];
     images: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: string }>;
+    geo?: {
+      coordinates?: number[]; // [longitude, latitude]
+    };
   };
   bookings: Array<{
     _id: string;
@@ -397,10 +415,24 @@ export default function AdminEventDetailPage({
                   <span className="font-medium text-ink-700">Address:</span>{" "}
                   <span className="text-ink-900">{eventDetail.venue.address}</span>
                 </div>
-                <div>
-                  <span className="font-medium text-ink-700">Locality:</span>{" "}
-                  <span className="text-ink-900">{eventDetail.venue.locality}</span>
-                </div>
+                {eventDetail.venue.locality && (
+                  <div>
+                    <span className="font-medium text-ink-700">Locality:</span>{" "}
+                    <span className="text-ink-900">{eventDetail.venue.locality}</span>
+                  </div>
+                )}
+                {eventDetail.venue.city && (
+                  <div>
+                    <span className="font-medium text-ink-700">City:</span>{" "}
+                    <span className="text-ink-900">{eventDetail.venue.city}</span>
+                  </div>
+                )}
+                {eventDetail.venue.state && (
+                  <div>
+                    <span className="font-medium text-ink-700">State:</span>{" "}
+                    <span className="text-ink-900">{eventDetail.venue.state}</span>
+                  </div>
+                )}
                 {eventDetail.venue.description && (
                   <div>
                     <span className="font-medium text-ink-700">Description:</span>{" "}
@@ -421,6 +453,22 @@ export default function AdminEventDetailPage({
                 </div>
               </div>
             </div>
+
+            {/* Venue Location Map */}
+            {eventDetail.venue.geo?.coordinates && eventDetail.venue.geo.coordinates.length === 2 && (
+              <div className="rounded-3xl border border-sand-200 bg-white/60 p-6 shadow-soft backdrop-blur">
+                <h2 className="font-display text-xl text-ink-900 mb-4">Venue Location</h2>
+                <AddressMap
+                  address={eventDetail.venue.address || ""}
+                  latitude={eventDetail.venue.geo.coordinates[1]} // latitude is second element
+                  longitude={eventDetail.venue.geo.coordinates[0]} // longitude is first element
+                  editable={false}
+                  onLocationSelect={() => {
+                    // No-op in view mode
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
 

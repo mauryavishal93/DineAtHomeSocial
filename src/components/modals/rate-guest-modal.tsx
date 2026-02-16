@@ -13,6 +13,9 @@ export type GuestRatingData = {
   comment?: string;
 };
 
+/** When present, user has already rated — show read-only view, no submit */
+type ExistingRatingView = GuestRatingData & { ratedAt?: string };
+
 type RateGuestModalProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -20,7 +23,8 @@ type RateGuestModalProps = {
   guestName: string;
   guestAge: number;
   guestGender: string;
-  existingRating?: GuestRatingData | null;
+  /** When set, rating is read-only and user can only view their last rating */
+  existingRating?: ExistingRatingView | null;
 };
 
 export function RateGuestModal({
@@ -63,22 +67,26 @@ export function RateGuestModal({
     });
   };
 
-  const StarRating = ({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string; }) => (
+  const isViewOnly = !!existingRating;
+  const StarRating = ({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string }) => (
     <div className="space-y-2">
       <div className="text-sm font-medium text-ink-900">{label}</div>
       <div className="flex gap-1">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <button
-            key={star}
-            type="button"
-            onClick={() => onChange(star)}
-            className={`text-2xl transition-colors ${
-              star <= value ? "text-amber-500" : "text-sand-300"
-            } hover:text-amber-400`}
-          >
-            ★
-          </button>
-        ))}
+        {[1, 2, 3, 4, 5].map((star) =>
+          isViewOnly ? (
+            <span key={star} className={`text-2xl ${star <= value ? "text-amber-500" : "text-sand-300"}`}>★</span>
+          ) : (
+            <button
+              key={star}
+              type="button"
+              onClick={() => onChange(star)}
+              className={`text-2xl transition-colors ${star <= value ? "text-amber-500" : "text-sand-300"} hover:text-amber-400`}
+              aria-label={`${star} star`}
+            >
+              ★
+            </button>
+          )
+        )}
       </div>
     </div>
   );
@@ -107,9 +115,13 @@ export function RateGuestModal({
 
         <div className="p-6 space-y-6">
           {existingRating ? (
-            <div className="rounded-2xl border border-sand-200 bg-sand-50/50 p-4">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4">
               <p className="text-sm font-medium text-ink-900">✓ You have already rated this guest</p>
-              <p className="text-xs text-ink-600 mt-1">Viewing your previous rating</p>
+              <p className="text-xs text-ink-600 mt-1">
+                {existingRating.ratedAt
+                  ? `Your rating from ${new Date(existingRating.ratedAt).toLocaleDateString(undefined, { dateStyle: "medium" })} — you cannot rate again.`
+                  : "Viewing your previous rating — you cannot rate again."}
+              </p>
             </div>
           ) : (
             <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4">

@@ -13,8 +13,9 @@ const RefreshTokenSchema = new Schema(
 const UserSchema = new Schema(
   {
     email: { type: String, required: true, unique: true, index: true },
-    mobile: { type: String, required: true, index: true },
-    passwordHash: { type: String, required: true },
+    mobile: { type: String, required: false, index: true },
+    passwordHash: { type: String, required: false },
+    googleId: { type: String, required: false, unique: true, sparse: true, index: true },
     role: {
       type: String,
       required: true,

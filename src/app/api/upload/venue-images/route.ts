@@ -8,6 +8,7 @@ import { Venue } from "@/server/models/Venue";
 import { HostProfile } from "@/server/models/HostProfile";
 import { serverError, unauthorized, badRequest } from "@/server/http/response";
 import { uploadRateLimit } from "@/server/utils/rateLimit";
+import { isConvertibleImage, processImageToWebp } from "@/server/utils/imageProcessor";
 
 export const runtime = "nodejs";
 
@@ -88,22 +89,31 @@ export async function POST(req: NextRequest) {
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
 
-      // Generate unique filename
+      let outBuffer = buffer;
+      let extension = file.name.split(".").pop() || "jpg";
+      let mime = file.type;
+
+      if (isConvertibleImage(file.type)) {
+        try {
+          const result = await processImageToWebp(buffer, file.type);
+          outBuffer = result.buffer;
+          extension = result.extension;
+          mime = result.mime;
+        } catch (err) {
+          console.warn("[Upload Venue Images] Image conversion failed, saving original:", err);
+        }
+      }
+
       const timestamp = Date.now();
       const randomStr = Math.random().toString(36).substring(2, 15);
-      const extension = file.name.split(".").pop() || "jpg";
       const fileName = `venue-${venueId}-${timestamp}-${randomStr}.${extension}`;
       const filePath = join(VENUE_IMAGES_DIR, fileName);
+      await writeFile(filePath, outBuffer);
 
-      // Save file
-      await writeFile(filePath, buffer);
-
-      // Relative path for storage in DB
       const relativePath = `venue-images/${fileName}`;
-
       uploadedImages.push({
         filePath: relativePath,
-        fileMime: file.type,
+        fileMime: mime,
         fileName: file.name
       });
     }

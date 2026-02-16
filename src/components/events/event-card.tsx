@@ -77,10 +77,10 @@ export function EventCard({ ev }: { ev: UIEvent }) {
   return (
     <Link
       href={`/events/${ev.id}`}
-      className="group overflow-hidden rounded-3xl border-2 border-violet-100 bg-gradient-to-br from-white via-pink-50/30 to-violet-50/30 shadow-lg backdrop-blur transition-all duration-300 hover:-translate-y-2 hover:shadow-colorful hover:border-violet-200 hover:scale-[1.02]"
+      className="group block min-w-0 overflow-hidden rounded-2xl sm:rounded-3xl border-2 border-violet-100 bg-gradient-to-br from-white via-pink-50/30 to-violet-50/30 shadow-lg backdrop-blur transition-all duration-300 hover:-translate-y-1 sm:hover:-translate-y-2 hover:shadow-colorful hover:border-violet-200 active:scale-[0.99]"
     >
-      <div className="relative">
-        <div className="relative h-44 overflow-hidden">
+      <div className="relative min-w-0">
+        <div className="relative h-40 sm:h-44 overflow-hidden">
           {hasMedia ? (
             // Media Slideshow
             <div className="relative h-full w-full">
@@ -172,13 +172,13 @@ export function EventCard({ ev }: { ev: UIEvent }) {
           {ev.seatsLeft <= 3 && ev.hostStatus !== "SUSPENDED" ? <Badge tone="warning">⚡ Few seats</Badge> : null}
         </div>
       </div>
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="font-display text-lg leading-tight text-ink-900">
+      <div className="p-3 sm:p-4">
+        <div className="flex items-start justify-between gap-2 sm:gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="font-display text-base sm:text-lg leading-tight text-ink-900 line-clamp-2">
               {ev.title}
             </div>
-            <div className="mt-1 text-sm text-ink-700">{ev.venueName}</div>
+            <div className="mt-1 text-sm text-ink-700 truncate">{ev.venueName}</div>
           </div>
           <div className="shrink-0 text-right">
             <div className="text-lg font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent">₹{Math.round(ev.priceFrom)}</div>
@@ -216,7 +216,7 @@ export function EventCard({ ev }: { ev: UIEvent }) {
           ))}
         </div>
 
-        <div className="mt-4 flex items-center justify-between border-t-2 border-gradient-to-r from-violet-200 via-pink-200 to-orange-200 bg-gradient-to-r from-violet-50/50 via-pink-50/50 to-orange-50/50 pt-3 px-2 -mx-2 -mb-2 rounded-b-3xl">
+        <div className="mt-4 flex items-center justify-between border-t-2 border-gradient-to-r from-violet-200 via-pink-200 to-orange-200 bg-gradient-to-r from-violet-50/50 via-pink-50/50 to-orange-50/50 pt-3 px-2 -mx-2 -mb-2 rounded-b-2xl sm:rounded-b-3xl">
           <span className="text-xs font-medium text-ink-700">Tap to view details & book</span>
           <span className="rounded-full border-2 border-violet-300 bg-gradient-to-r from-violet-100 to-pink-100 px-3 py-1 text-xs font-semibold text-violet-800 shadow-sm">
             {mounted ? dateLabel : "..."}

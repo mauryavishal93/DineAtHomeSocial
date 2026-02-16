@@ -12,7 +12,7 @@ const guestSchema = z.object({
   gender: z.enum(["Male", "Female", "Other"]),
   email: z.string().email(),
   password: z.string().min(8),
-  mobile: z.string().min(8).max(20)
+  mobile: z.string().regex(/^\d{10}$/, "Mobile must be exactly 10 digits")
 });
 
 const hostSchema = z.object({
@@ -55,7 +55,7 @@ const hostSchema = z.object({
     }),
   email: z.string().email(),
   password: z.string().min(8),
-  mobile: z.string().min(8).max(20)
+  mobile: z.string().regex(/^\d{10}$/, "Mobile must be exactly 10 digits")
 });
 
 const schema = z.discriminatedUnion("role", [guestSchema, hostSchema]);

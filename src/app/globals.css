@@ -1,18 +1,44 @@
+/* Leaflet CSS - must be imported before other rules */
+@import "leaflet/dist/leaflet.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Leaflet CSS */
-@import "leaflet/dist/leaflet.css";
+/* Ensure Leaflet map containers are visible and properly styled */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  z-index: 0;
+}
+
+.leaflet-container .leaflet-control-container {
+  z-index: 1;
+}
+
+/* Fix for Leaflet marker icons */
+.leaflet-default-icon-path {
+  background-image: url('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png');
+}
+
+.leaflet-default-icon-shadow {
+  background-image: url('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png');
+}
 
 :root {
   --bg: 251 250 248; /* sand-50 */
   --fg: 31 36 48; /* ink-900 */
 }
 
-html,
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   height: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
 }
 
 body {

@@ -5,6 +5,7 @@ import { Booking } from "@/server/models/Booking";
 import { EventSlot } from "@/server/models/EventSlot";
 import { Payment } from "@/server/models/Payment";
 import { Notification } from "@/server/models/Notification";
+import { EventPass } from "@/server/models/EventPass";
 import { createResponse } from "@/server/http/response";
 
 export const runtime = "nodejs";
@@ -129,6 +130,21 @@ export async function POST(
           }
         }
       );
+    }
+
+    // Invalidate all event passes for this booking
+    try {
+      await EventPass.updateMany(
+        { bookingId: bookingDoc._id },
+        {
+          $set: {
+            isValid: false
+          }
+        }
+      );
+    } catch (passError) {
+      console.error("Failed to invalidate event passes:", passError);
+      // Continue even if pass invalidation fails
     }
 
     // Notify host (best effort)

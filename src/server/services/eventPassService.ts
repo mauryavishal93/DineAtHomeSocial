@@ -18,7 +18,7 @@ function generateEventCode(): string {
 }
 
 /**
- * Create event passes for a booking
+ * Create event pass for a booking (single pass with all guests)
  */
 export async function createEventPasses(bookingId: string) {
   await connectMongo();
@@ -30,15 +30,13 @@ export async function createEventPasses(bookingId: string) {
   
   const bookingDoc = booking as any;
   
-  // Check if passes already exist
-  const existingPasses = await EventPass.find({ bookingId }).lean();
-  if (existingPasses.length > 0) {
-    return existingPasses.map(p => String((p as any)._id));
+  // Check if pass already exists (only one pass per booking)
+  const existingPass = await EventPass.findOne({ bookingId }).lean();
+  if (existingPass) {
+    return [String((existingPass as any)._id)];
   }
   
-  const passes: string[] = [];
-  
-  // Generate unique code for primary guest
+  // Generate unique code for the booking pass
   let eventCode = generateEventCode();
   let codeExists = await EventPass.findOne({ eventCode }).lean();
   while (codeExists) {
@@ -46,8 +44,9 @@ export async function createEventPasses(bookingId: string) {
     codeExists = await EventPass.findOne({ eventCode }).lean();
   }
   
-  // Create pass for primary guest
-  const primaryPass = await EventPass.create({
+  // Create single pass for the booking with primary guest details
+  // (additional guests will be shown from booking data when pass is retrieved)
+  const pass = await EventPass.create({
     bookingId: bookingDoc._id,
     eventSlotId: bookingDoc.eventSlotId,
     guestUserId: bookingDoc.guestUserId,
@@ -57,47 +56,12 @@ export async function createEventPasses(bookingId: string) {
     guestMobile: bookingDoc.guestMobile,
     guestAge: bookingDoc.guestAge,
     guestGender: bookingDoc.guestGender,
-    passType: "PRIMARY",
+    passType: "PRIMARY", // Keep for backward compatibility
     isValid: true,
     emailSent: false
   });
   
-  passes.push(String(primaryPass._id));
-  
-  // Create passes for additional guests
-  if (bookingDoc.additionalGuests && bookingDoc.additionalGuests.length > 0) {
-    for (let i = 0; i < bookingDoc.additionalGuests.length; i++) {
-      const guest = bookingDoc.additionalGuests[i];
-      
-      // Generate unique code
-      let additionalCode = generateEventCode();
-      codeExists = await EventPass.findOne({ eventCode: additionalCode }).lean();
-      while (codeExists) {
-        additionalCode = generateEventCode();
-        codeExists = await EventPass.findOne({ eventCode: additionalCode }).lean();
-      }
-      
-      const additionalPass = await EventPass.create({
-        bookingId: bookingDoc._id,
-        eventSlotId: bookingDoc.eventSlotId,
-        guestUserId: bookingDoc.guestUserId, // Same user who booked
-        hostUserId: bookingDoc.hostUserId,
-        eventCode: additionalCode,
-        guestName: guest.name,
-        guestMobile: guest.mobile,
-        guestAge: guest.age,
-        guestGender: guest.gender,
-        passType: "ADDITIONAL",
-        additionalGuestIndex: i,
-        isValid: true,
-        emailSent: false
-      });
-      
-      passes.push(String(additionalPass._id));
-    }
-  }
-  
-  return passes;
+  return [String(pass._id)];
 }
 
 /**
@@ -138,6 +102,19 @@ export async function getEventPassById(passId: string) {
     ? hostProfile.firstName
     : "Host";
   
+  // Get booking to fetch additional guests
+  const booking = await Booking.findById(passDoc.bookingId).lean();
+  const bookingDoc = booking as any;
+  
+  // Get all additional guests from the booking
+  const additionalGuests = (bookingDoc?.additionalGuests || []).map((guest: any, index: number) => ({
+    name: guest.name,
+    mobile: guest.mobile,
+    age: guest.age,
+    gender: guest.gender,
+    index: index
+  }));
+  
   return {
     passId: String(passDoc._id),
     eventCode: passDoc.eventCode,
@@ -148,6 +125,7 @@ export async function getEventPassById(passId: string) {
     passType: passDoc.passType,
     isValid: passDoc.isValid,
     validatedAt: passDoc.validatedAt,
+    additionalGuests: additionalGuests,
     event: {
       eventId: String(eventDoc._id),
       eventName: eventDoc.eventName,
@@ -256,24 +234,29 @@ export async function validateEventPass(eventCode: string, validatedBy: string) 
 }
 
 /**
- * Get all passes for a booking
+ * Get pass for a booking (single pass with all guests)
  */
 export async function getEventPassesByBooking(bookingId: string) {
   await connectMongo();
   
-  const passes = await EventPass.find({ bookingId })
+  // Get the single pass for this booking
+  const pass = await EventPass.findOne({ bookingId })
     .populate({ path: "eventSlotId", select: "eventName startAt endAt" })
     .lean();
   
-  return passes.map(p => {
-    const pass = p as any;
-    return {
-      passId: String(pass._id),
-      eventCode: pass.eventCode,
-      guestName: pass.guestName,
-      passType: pass.passType,
-      isValid: pass.isValid,
-      validatedAt: pass.validatedAt
-    };
-  });
+  if (!pass) {
+    return [];
+  }
+  
+  const passDoc = pass as any;
+  
+  // Return single pass (all guest details will be included when pass is retrieved by ID)
+  return [{
+    passId: String(passDoc._id),
+    eventCode: passDoc.eventCode,
+    guestName: passDoc.guestName,
+    passType: passDoc.passType,
+    isValid: passDoc.isValid,
+    validatedAt: passDoc.validatedAt
+  }];
 }

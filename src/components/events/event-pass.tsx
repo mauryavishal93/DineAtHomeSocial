@@ -16,6 +16,13 @@ type EventPassData = {
   passType: "PRIMARY" | "ADDITIONAL";
   isValid: boolean;
   validatedAt: string | null;
+  additionalGuests?: Array<{
+    name: string;
+    mobile: string;
+    age: number;
+    gender: string;
+    index: number;
+  }>;
   event: {
     eventId: string;
     eventName: string;
@@ -203,7 +210,7 @@ export function EventPass({ pass, onClose }: EventPassProps) {
               <p className="text-sm text-ink-600">DineAtHome Social Event</p>
             </div>
 
-            {/* Guest Info */}
+            {/* All Guests Information */}
             <div className="bg-white/80 rounded-xl p-4 mb-4 border border-violet-100">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-ink-900">Guest Information</h3>
@@ -213,20 +220,58 @@ export function EventPass({ pass, onClose }: EventPassProps) {
                   <Badge tone="warning" className="text-xs">Used</Badge>
                 )}
               </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-ink-600">Name:</span>
-                  <span className="font-medium text-ink-900">{pass.guestName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-ink-600">Age:</span>
-                  <span className="font-medium text-ink-900">{pass.guestAge} years</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-ink-600">Mobile:</span>
-                  <span className="font-medium text-ink-900">{pass.guestMobile}</span>
+              
+              {/* Primary Guest */}
+              <div className="mb-4 pb-4 border-b border-violet-100">
+                <p className="text-xs font-medium text-violet-700 mb-2 uppercase tracking-wide">Primary Guest</p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-ink-600">Name:</span>
+                    <span className="font-medium text-ink-900">{pass.guestName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-ink-600">Age:</span>
+                    <span className="font-medium text-ink-900">{pass.guestAge} years</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-ink-600">Gender:</span>
+                    <span className="font-medium text-ink-900">{pass.guestGender}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-ink-600">Mobile:</span>
+                    <span className="font-medium text-ink-900">{pass.guestMobile}</span>
+                  </div>
                 </div>
               </div>
+
+              {/* Additional Guests (if any) */}
+              {pass.additionalGuests && pass.additionalGuests.length > 0 && (
+                <div className="space-y-4">
+                  {pass.additionalGuests.map((guest, idx) => (
+                    <div key={idx} className={idx < pass.additionalGuests!.length - 1 ? "pb-4 border-b border-violet-100" : ""}>
+                      <p className="text-xs font-medium text-purple-700 mb-2 uppercase tracking-wide">Additional Guest {idx + 1}</p>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-ink-600">Name:</span>
+                          <span className="font-medium text-ink-900">{guest.name}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-ink-600">Age:</span>
+                          <span className="font-medium text-ink-900">{guest.age} years</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-ink-600">Gender:</span>
+                          <span className="font-medium text-ink-900">{guest.gender}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-ink-600">Mobile:</span>
+                          <span className="font-medium text-ink-900">{guest.mobile}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Event Code - Prominent */}
