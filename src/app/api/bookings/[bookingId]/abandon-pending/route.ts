@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/server/auth/rbac";
-import { createResponse } from "@/server/http/response";
+import { ok, createResponse } from "@/server/http/response";
 import {
   releasePendingAddonPayment,
   releaseUnpaidBooking
@@ -34,14 +34,14 @@ export async function POST(
           { status: addonResult.error === "Unauthorized" ? 403 : 400 }
         );
       }
-      return createResponse({ success: true });
+      return ok({ released: true });
     }
 
     const result = await releaseUnpaidBooking(bookingId, ctx.userId);
     if (!result.ok) {
       return createResponse({ error: result.error }, { status: result.error === "Unauthorized" ? 403 : 400 });
     }
-    return createResponse({ success: true });
+    return ok({ released: true });
   } catch (error: any) {
     return createResponse({ error: error.message }, { status: 401 });
   }

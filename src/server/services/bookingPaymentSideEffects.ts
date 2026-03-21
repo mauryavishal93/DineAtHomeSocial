@@ -72,8 +72,11 @@ export async function finalizeBookingAfterPayment(bookingId: string) {
 export async function releaseUnpaidBooking(bookingId: string, guestUserId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   await connectMongo();
 
-  const booking = await Booking.findById(bookingId).lean();
-  if (!booking) return { ok: false, error: "Booking not found" };
+  const booking = await Booking.findById(bookingId)
+    .select({ guestUserId: 1, status: 1, eventSlotId: 1, seats: 1, paymentId: 1 })
+    .lean();
+  /** Idempotent: Razorpay may call dismiss twice, or client may retry. */
+  if (!booking) return { ok: true };
 
   const b = booking as any;
   if (String(b.guestUserId) !== String(guestUserId)) {
@@ -83,20 +86,30 @@ export async function releaseUnpaidBooking(bookingId: string, guestUserId: strin
     return { ok: false, error: "Only unpaid pending bookings can be released" };
   }
 
-  const cur = (await EventSlot.findById(b.eventSlotId).lean()) as any;
+  const seats = Number(b.seats || 0);
+  const slotId = b.eventSlotId;
+  if (!slotId) return { ok: false, error: "Event not found" };
+
+  const cur = (await EventSlot.findById(slotId).select({ seatsRemaining: 1 }).lean()) as {
+    seatsRemaining?: number;
+  } | null;
   if (!cur) return { ok: false, error: "Event not found" };
 
-  const seats = Number(b.seats || 0);
   const newRem = (cur.seatsRemaining ?? 0) + seats;
-  await EventSlot.findByIdAndUpdate(b.eventSlotId, {
-    $inc: { seatsRemaining: seats },
-    ...(newRem > 0 ? { $set: { status: "OPEN" } } : {})
-  });
+  const slotUp = await EventSlot.updateOne(
+    { _id: slotId },
+    {
+      $inc: { seatsRemaining: seats },
+      ...(newRem > 0 ? { $set: { status: "OPEN" } } : {})
+    }
+  );
+  if (slotUp.matchedCount === 0) return { ok: false, error: "Event not found" };
 
-  if (b.paymentId) {
-    await Payment.deleteOne({ _id: b.paymentId });
-  }
-  await Booking.deleteOne({ _id: bookingId });
+  const payId = b.paymentId;
+  await Promise.all([
+    payId ? Payment.deleteOne({ _id: payId }) : Promise.resolve(),
+    Booking.deleteOne({ _id: bookingId })
+  ]);
 
   return { ok: true };
 }
@@ -124,7 +137,8 @@ export async function releasePendingAddonPayment(
   }
 
   const p = await Payment.findById(paymentId).lean();
-  if (!p) return { ok: false, error: "Payment not found" };
+  /** Idempotent: dismiss + retry */
+  if (!p) return { ok: true };
   const pd = p as any;
   if (String(pd.bookingId) !== String(bookingId)) {
     return { ok: false, error: "Payment does not belong to this booking" };

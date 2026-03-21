@@ -3,6 +3,37 @@ import { loadRazorpayScript } from "@/lib/razorpay-checkout";
 
 export type GuestCheckoutOutcome = "paid" | "dismissed" | "verify_failed";
 
+/** Fast path: no token-refresh / JSON parse overhead — must run when checkout is dismissed. */
+async function postAbandonPending(opts: {
+  token: string;
+  bookingId: string;
+  paymentId?: string;
+  abandonMode: "full" | "addon";
+}): Promise<void> {
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${opts.token}`
+  };
+  let body: string | undefined;
+  if (opts.abandonMode === "addon") {
+    if (!opts.paymentId) {
+      console.error("[Razorpay] addon abandon missing paymentId");
+      return;
+    }
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify({ paymentId: opts.paymentId });
+  }
+  const res = await fetch(`/api/bookings/${opts.bookingId}/abandon-pending`, {
+    method: "POST",
+    headers,
+    body,
+    keepalive: true
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    console.warn("[Razorpay] abandon-pending failed:", res.status, t);
+  }
+}
+
 /**
  * Opens Razorpay Checkout for a server-created order, verifies on success,
  * and releases seats / add-on on dismiss (per abandonMode).
@@ -10,7 +41,8 @@ export type GuestCheckoutOutcome = "paid" | "dismissed" | "verify_failed";
 export async function openGuestCheckoutAndVerify(opts: {
   token: string;
   bookingId: string;
-  paymentId: string;
+  /** Required for add-on abandon payload; optional for full booking (server finds payment via booking). */
+  paymentId?: string;
   amountPaise: number;
   razorpayOrderId: string;
   razorpayKeyId: string;
@@ -59,22 +91,14 @@ export async function openGuestCheckoutAndVerify(opts: {
         }
       },
       modal: {
+        /** Fires when user closes checkout without completing payment — release seats immediately. */
         ondismiss: async () => {
-          if (opts.abandonMode === "addon") {
-            await apiFetch(`/api/bookings/${opts.bookingId}/abandon-pending`, {
-              method: "POST",
-              headers: {
-                authorization: `Bearer ${opts.token}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ paymentId: opts.paymentId })
-            });
-          } else {
-            await apiFetch(`/api/bookings/${opts.bookingId}/abandon-pending`, {
-              method: "POST",
-              headers: { authorization: `Bearer ${opts.token}` }
-            });
-          }
+          await postAbandonPending({
+            token: opts.token,
+            bookingId: opts.bookingId,
+            paymentId: opts.paymentId,
+            abandonMode: opts.abandonMode
+          });
           resolve("dismissed");
         }
       },

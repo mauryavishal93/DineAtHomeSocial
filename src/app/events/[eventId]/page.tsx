@@ -454,13 +454,16 @@ export default function EventDetailPage({
           } else {
             setBookingError("We could not confirm payment. If you were charged, contact support.");
           }
-          const refreshRes = await apiFetch<EventDetail>(`/api/events/${eventId}`, { method: "GET" });
+          const [refreshRes, bookingRefresh] = await Promise.all([
+            apiFetch<EventDetail>(`/api/events/${eventId}`, { method: "GET" }),
+            apiFetch<typeof existingBooking>(`/api/events/${eventId}/my-booking`, {
+              method: "GET",
+              headers: { authorization: `Bearer ${token}` }
+            })
+          ]);
           if (refreshRes.ok) setEv(refreshRes.data);
-          const bookingRefresh = await apiFetch<typeof existingBooking>(
-            `/api/events/${eventId}/my-booking`,
-            { method: "GET", headers: { authorization: `Bearer ${token}` } }
-          );
-          if (bookingRefresh.ok && bookingRefresh.data) setExistingBooking(bookingRefresh.data);
+          if (bookingRefresh.ok) setExistingBooking(bookingRefresh.data ?? null);
+          else if (outcome === "dismissed") setExistingBooking(null);
           return;
         }
       } else {
@@ -538,8 +541,24 @@ export default function EventDetailPage({
         } else {
           setBookingError("We could not confirm payment. If you were charged, contact support.");
         }
-        const refreshRes = await apiFetch<EventDetail>(`/api/events/${eventId}`, { method: "GET" });
+        const [refreshRes, bookingRefresh] = await Promise.all([
+          apiFetch<EventDetail>(`/api/events/${eventId}`, { method: "GET" }),
+          apiFetch<{
+            bookingId: string;
+            seats: number;
+            guestName: string;
+            guestMobile: string;
+            additionalGuests: AdditionalGuest[];
+            amountTotal: number;
+            status: string;
+          }>(`/api/events/${eventId}/my-booking`, {
+            method: "GET",
+            headers: { authorization: `Bearer ${token}` }
+          })
+        ]);
         if (refreshRes.ok) setEv(refreshRes.data);
+        if (bookingRefresh.ok) setExistingBooking(bookingRefresh.data ?? null);
+        else if (outcome === "dismissed") setExistingBooking(null);
         return;
       }
     } else {

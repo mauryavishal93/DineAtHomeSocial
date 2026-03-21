@@ -30,7 +30,9 @@ export async function POST(req: Request) {
     const { bookingId, paymentId, razorpay_order_id, razorpay_payment_id, razorpay_signature } =
       parsed.data;
 
-    const booking = await Booking.findById(bookingId).lean();
+    const booking = await Booking.findById(bookingId)
+      .select({ guestUserId: 1, status: 1, eventSlotId: 1 })
+      .lean();
     if (!booking) return badRequest("Booking not found");
     const b = booking as any;
     if (String(b.guestUserId) !== String(ctx.userId)) return forbidden();
