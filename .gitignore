@@ -48,6 +48,10 @@ uploads/
 *.jpg
 *.jpeg
 *.png
+!public/logo.png
+!public/favicon-32.png
+!public/icon-48.png
+!public/apple-touch-icon.png
 *.gif
 *.mp4
 *.mov
