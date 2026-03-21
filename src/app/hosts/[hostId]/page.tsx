@@ -22,6 +22,7 @@ import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
 import { UserActionsMenu } from "@/components/user-actions-menu";
 import { formatCurrency } from "@/lib/currency";
+import { buildVenueAddressQuery, isValidLatLng, openStreetMapVenueUrl } from "@/lib/openstreetmap-links";
 
 function StarRating({ rating }: { rating: number }) {
   const fullStars = Math.floor(rating);
@@ -251,14 +252,34 @@ export default function HostProfilePage() {
             )}
 
             {/* Map Location */}
-            {venue && venue.latitude && venue.longitude && (
+            {venue && (venue.address || venue.locality) && (
               <div className="rounded-3xl border border-sand-200 bg-white/60 p-6 shadow-soft backdrop-blur">
                 <h2 className="font-display text-xl text-ink-900 mb-4">Location</h2>
+                <div className="mb-4 flex flex-wrap gap-3">
+                  <a
+                    href={openStreetMapVenueUrl({
+                      latitude: venue.latitude,
+                      longitude: venue.longitude,
+                      addressQuery: buildVenueAddressQuery([venue.address, venue.locality])
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full border-2 border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-900 shadow-sm transition hover:bg-violet-100"
+                  >
+                    <span aria-hidden>📍</span>
+                    Open in OpenStreetMap
+                  </a>
+                </div>
                 <AddressMap
-                  address={venue.address || ""}
-                  latitude={venue.latitude}
-                  longitude={venue.longitude}
+                  address={buildVenueAddressQuery([venue.address, venue.locality])}
+                  latitude={
+                    isValidLatLng(venue.latitude, venue.longitude) ? venue.latitude : null
+                  }
+                  longitude={
+                    isValidLatLng(venue.latitude, venue.longitude) ? venue.longitude : null
+                  }
                   editable={false}
+                  allowAddressGeocode
                   onLocationSelect={() => {
                     // No-op in view mode
                   }}

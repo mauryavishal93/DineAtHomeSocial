@@ -87,16 +87,16 @@ export async function POST(req: NextRequest) {
       }
 
       const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
+      const buffer = Buffer.from(bytes) as Buffer;
 
-      let outBuffer = buffer;
+      let outBuffer: Buffer = buffer;
       let extension = file.name.split(".").pop() || "jpg";
       let mime = file.type;
 
       if (isConvertibleImage(file.type)) {
         try {
           const result = await processImageToWebp(buffer, file.type);
-          outBuffer = result.buffer;
+          outBuffer = result.buffer as Buffer;
           extension = result.extension;
           mime = result.mime;
         } catch (err) {

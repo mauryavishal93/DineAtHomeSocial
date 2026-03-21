@@ -27,6 +27,17 @@ function isNamespaceExistsError(err: unknown) {
 export async function initMongoCollections() {
   await connectMongo();
 
+  // One-shot data fix: empty referralCode violates sparse unique (all "" collide)
+  try {
+    const db = mongoose.connection.db;
+    if (db) {
+      await db.collection("guestprofiles").updateMany({ referralCode: "" }, { $unset: { referralCode: "" } });
+      await db.collection("hostprofiles").updateMany({ referralCode: "" }, { $unset: { referralCode: "" } });
+    }
+  } catch {
+    // non-fatal
+  }
+
   const models: Model<unknown>[] = [
     User,
     GuestProfile,

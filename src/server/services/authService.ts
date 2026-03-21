@@ -95,6 +95,11 @@ export async function loginUser(input: { email: string; password: string }) {
   const user = await User.findOne({ email: input.email.trim().toLowerCase() });
   if (!user) throw new Error("Invalid credentials");
 
+  // Google-only accounts have no password hash; same message avoids email enumeration
+  if (!user.passwordHash || String(user.passwordHash).length < 10) {
+    throw new Error("Invalid credentials");
+  }
+
   const ok = await verifyPassword(input.password, user.passwordHash);
   if (!ok) throw new Error("Invalid credentials");
   if (user.status === "SUSPENDED") throw new Error("Account suspended");

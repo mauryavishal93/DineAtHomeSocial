@@ -67,14 +67,16 @@ export async function POST(req: NextRequest) {
 
       const timestamp = Date.now();
       const randomStr = Math.random().toString(36).substring(2, 15);
-      let outBuffer = buffer;
+      // Use a generic Buffer type here to avoid issues with different Buffer generics
+      let outBuffer: Buffer = buffer as Buffer;
       let extension = file.name.split(".").pop() || "jpg";
       let mime = file.type;
 
       if (isConvertibleImage(file.type)) {
         try {
           const result = await processImageToWebp(buffer, file.type);
-          outBuffer = result.buffer;
+          // Cast is safe here; both are Node Buffers but have slightly different generic signatures
+          outBuffer = result.buffer as Buffer;
           extension = result.extension;
           mime = result.mime;
         } catch (err) {

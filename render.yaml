@@ -1,13 +1,15 @@
+# Next.js needs `next build` output in `.next` before `npm start` (server.js → next start).
+# Dashboard “Build Command” must NOT be only `npm install -D tailwindcss …`.
 services:
   - type: web
     name: dineathome
     env: node
-    buildCommand: npm install && npm run build
+    # Install all deps (incl. devDeps for Tailwind/TS), then produce .next
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     envVars:
+      # Runtime only; avoids npm skipping devDependencies during build if set too early
       - key: NODE_ENV
         value: production
       - key: HOSTNAME
         value: 0.0.0.0
-    # Root directory is the repository root (where package.json is located)
-    # No rootDir specified means it uses the repo root

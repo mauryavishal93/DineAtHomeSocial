@@ -99,6 +99,12 @@ export default function NotificationsPage() {
       markAsRead(notif.id);
     }
     
+    if (notif.type === "NEW_MESSAGE" && notif.metadata?.eventId && notif.metadata?.bookingId) {
+      router.push(
+        `/messages?eventId=${encodeURIComponent(notif.metadata.eventId)}&bookingId=${encodeURIComponent(notif.metadata.bookingId)}`
+      );
+      return;
+    }
     // Navigate to event if available
     if (notif.metadata?.eventId) {
       router.push(`/events/${notif.metadata.eventId}`);

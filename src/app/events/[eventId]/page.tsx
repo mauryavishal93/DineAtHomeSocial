@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/http";
+import { openGuestCheckoutAndVerify } from "@/lib/razorpay-guest";
 import { getAccessToken, getRole } from "@/lib/session";
 import { AddGuestModal, type AdditionalGuest } from "@/components/modals/add-guest-modal";
 import { ShareButton } from "@/components/events/share-button";
@@ -19,17 +20,7 @@ import { ReminderButton } from "@/components/events/reminder-button";
 import { RefundModal } from "@/components/modals/refund-modal";
 import { CancelEventModal } from "@/components/modals/cancel-event-modal";
 import { EventPass } from "@/components/events/event-pass";
-import dynamic from "next/dynamic";
-
-// Dynamically import AddressMap to avoid SSR issues with Leaflet
-const AddressMap = dynamic(() => import("@/components/map/address-map").then((mod) => mod.AddressMap), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-64 rounded-lg border border-sand-200 bg-sand-100 flex items-center justify-center text-sm text-ink-600">
-      Loading map...
-    </div>
-  )
-});
+import { VenueWhereYoullGoSection } from "@/components/map/venue-where-youll-go-section";
 
 type EventDetail = {
   id: string;
@@ -64,7 +55,54 @@ type EventDetail = {
   eventImages?: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>;
   eventVideos?: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>;
   venueImages?: Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>;
+  hostProfileImagePath?: string;
+  hostCoverImagePath?: string;
 };
+
+type EventMedia = {
+  filePath: string;
+  fileMime: string;
+  fileName: string;
+  uploadedAt: Date;
+};
+
+/** Hero: event media first, then venue photos, then host cover/profile when the host added them. */
+function pathToHeroMedia(path: string, fileName: string): EventMedia {
+  const lower = path.toLowerCase();
+  let fileMime = "image/jpeg";
+  if (lower.endsWith(".png")) fileMime = "image/png";
+  else if (lower.endsWith(".webp")) fileMime = "image/webp";
+  else if (lower.endsWith(".gif")) fileMime = "image/gif";
+  return {
+    filePath: path.trim(),
+    fileMime,
+    fileName,
+    uploadedAt: new Date(0)
+  };
+}
+
+function buildHeroSlides(
+  eventImages: EventMedia[],
+  eventVideos: EventMedia[],
+  venueImages: EventMedia[] | undefined,
+  hostCoverPath?: string,
+  hostProfilePath?: string
+): EventMedia[] {
+  const seen = new Set<string>();
+  const out: EventMedia[] = [];
+  const push = (item: EventMedia) => {
+    const p = item.filePath?.trim();
+    if (!p || seen.has(p)) return;
+    seen.add(p);
+    out.push({ ...item, filePath: p });
+  };
+  for (const x of eventImages) push(x);
+  for (const x of eventVideos) push(x);
+  for (const x of venueImages || []) push(x);
+  if (hostCoverPath?.trim()) push(pathToHeroMedia(hostCoverPath, "Host cover"));
+  if (hostProfilePath?.trim()) push(pathToHeroMedia(hostProfilePath, "Host"));
+  return out;
+}
 
 function formatDateLabel(iso: string) {
   const d = new Date(iso);
@@ -130,6 +168,17 @@ export default function EventDetailPage({
   const [eventImages, setEventImages] = useState<Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>>([]);
   const [eventVideos, setEventVideos] = useState<Array<{ filePath: string; fileMime: string; fileName: string; uploadedAt: Date }>>([]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const heroSlides = useMemo(
+    () =>
+      buildHeroSlides(
+        eventImages,
+        eventVideos,
+        ev?.venueImages,
+        ev?.hostCoverImagePath,
+        ev?.hostProfileImagePath
+      ),
+    [eventImages, eventVideos, ev?.venueImages, ev?.hostCoverImagePath, ev?.hostProfileImagePath]
+  );
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isEventOwner, setIsEventOwner] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -242,21 +291,29 @@ export default function EventDetailPage({
     })();
   }, [isEventOwner, token, ev, params]);
 
+  useEffect(() => {
+    if (heroSlides.length === 0) {
+      setCurrentSlideIndex(0);
+      return;
+    }
+    setCurrentSlideIndex((i) => Math.min(i, heroSlides.length - 1));
+  }, [heroSlides.length]);
+
   // Auto-advance slideshow for images (videos handle their own transitions)
   useEffect(() => {
-    const total = eventImages.length + eventVideos.length;
-    if (total === 0 || total === 1) return; // No need to auto-advance if 0 or 1 item
+    const total = heroSlides.length;
+    if (total <= 1) return;
 
-    // Only auto-advance if current slide is an image (videos auto-advance on end)
-    const isImage = currentSlideIndex < eventImages.length;
-    if (!isImage) return; // Videos handle their own transitions
+    const current = heroSlides[currentSlideIndex];
+    const isVideo = (current?.fileMime || "").startsWith("video/");
+    if (isVideo) return;
 
     const interval = setInterval(() => {
       setCurrentSlideIndex((prev) => (prev + 1) % total);
-    }, 5000); // Change slide every 5 seconds
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [currentSlideIndex, eventImages.length, eventVideos.length]);
+  }, [currentSlideIndex, heroSlides]);
 
   // Fetch current user details
   useEffect(() => {
@@ -346,25 +403,73 @@ export default function EventDetailPage({
     
     // If existing booking: Use add-guests endpoint
     if (existingBooking) {
-      const res = await apiFetch<{ bookingId: string; amountTotal: number; additionalAmount: number }>(
-        `/api/bookings/${existingBooking.bookingId}/add-guests`,
-        {
-          method: "POST",
-          headers: { authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            seats: bookingSeats,
-            additionalGuests
-          })
-        }
-      );
-      
-      setBookingInProgress(false);
+      const res = await apiFetch<{
+        bookingId: string;
+        amountTotal: number;
+        additionalAmount: number;
+        requiresPayment?: boolean;
+        razorpayOrderId?: string | null;
+        paymentId?: string | null;
+        razorpayKeyId?: string | null;
+      }>(`/api/bookings/${existingBooking.bookingId}/add-guests`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          seats: bookingSeats,
+          additionalGuests
+        })
+      });
+
       if (!res.ok) {
+        setBookingInProgress(false);
         setBookingError(res.error);
         return;
       }
-      
-      setBookingSuccess(`${bookingSeats} guest${bookingSeats > 1 ? 's' : ''} added! Additional amount: ₹${(res.data.additionalAmount / 100).toFixed(0)}. Total booking: ${alreadyBookedSeats + bookingSeats} seats.`);
+
+      const addData = res.data;
+      if (
+        addData.requiresPayment &&
+        addData.razorpayOrderId &&
+        addData.razorpayKeyId &&
+        addData.paymentId
+      ) {
+        const amountForCheckout =
+          existingBooking.status === "CONFIRMED"
+            ? addData.additionalAmount
+            : addData.amountTotal;
+        const outcome = await openGuestCheckoutAndVerify({
+          token,
+          bookingId: addData.bookingId,
+          paymentId: addData.paymentId,
+          amountPaise: amountForCheckout,
+          razorpayOrderId: addData.razorpayOrderId,
+          razorpayKeyId: addData.razorpayKeyId,
+          abandonMode: existingBooking.status === "CONFIRMED" ? "addon" : "full",
+          prefill: { name: currentUser.name, contact: currentUser.mobile }
+        });
+        setBookingInProgress(false);
+        if (outcome !== "paid") {
+          if (outcome === "dismissed") {
+            setBookingError("Payment was cancelled. Extra seats were released.");
+          } else {
+            setBookingError("We could not confirm payment. If you were charged, contact support.");
+          }
+          const refreshRes = await apiFetch<EventDetail>(`/api/events/${eventId}`, { method: "GET" });
+          if (refreshRes.ok) setEv(refreshRes.data);
+          const bookingRefresh = await apiFetch<typeof existingBooking>(
+            `/api/events/${eventId}/my-booking`,
+            { method: "GET", headers: { authorization: `Bearer ${token}` } }
+          );
+          if (bookingRefresh.ok && bookingRefresh.data) setExistingBooking(bookingRefresh.data);
+          return;
+        }
+      } else {
+        setBookingInProgress(false);
+      }
+
+      setBookingSuccess(
+        `${bookingSeats} guest${bookingSeats > 1 ? "s" : ""} added! Additional amount: ₹${(addData.additionalAmount / 100).toFixed(0)}. Total booking: ${alreadyBookedSeats + bookingSeats} seats.`
+      );
       
       // Refresh booking status
       const bookingRefresh = await apiFetch<any>(`/api/events/${eventId}/my-booking`, {
@@ -390,21 +495,58 @@ export default function EventDetailPage({
       additionalGuests
     };
     
-    const res = await apiFetch<{ bookingId: string; amountTotal: number }>(
-      "/api/guest/bookings",
-      {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` },
-        body: JSON.stringify(bookingData)
-      }
-    );
-    setBookingInProgress(false);
+    const res = await apiFetch<{
+      bookingId: string;
+      paymentId: string;
+      amountTotal: number;
+      status: string;
+      requiresPayment?: boolean;
+      razorpayOrderId?: string | null;
+      razorpayKeyId?: string | null;
+    }>("/api/guest/bookings", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+      body: JSON.stringify(bookingData)
+    });
     if (!res.ok) {
+      setBookingInProgress(false);
       setBookingError(res.error);
       return;
     }
-    
-    const successMessage = `Booking confirmed! Amount: ₹${(res.data.amountTotal / 100).toFixed(0)}. You can view all your bookings in My Bookings page.`;
+
+    const bookData = res.data;
+    if (
+      bookData.requiresPayment &&
+      bookData.razorpayOrderId &&
+      bookData.razorpayKeyId &&
+      bookData.paymentId
+    ) {
+      const outcome = await openGuestCheckoutAndVerify({
+        token,
+        bookingId: bookData.bookingId,
+        paymentId: bookData.paymentId,
+        amountPaise: bookData.amountTotal,
+        razorpayOrderId: bookData.razorpayOrderId,
+        razorpayKeyId: bookData.razorpayKeyId,
+        abandonMode: "full",
+        prefill: { name: currentUser.name, contact: currentUser.mobile }
+      });
+      setBookingInProgress(false);
+      if (outcome !== "paid") {
+        if (outcome === "dismissed") {
+          setBookingError("Payment was cancelled. The reserved seat has been released.");
+        } else {
+          setBookingError("We could not confirm payment. If you were charged, contact support.");
+        }
+        const refreshRes = await apiFetch<EventDetail>(`/api/events/${eventId}`, { method: "GET" });
+        if (refreshRes.ok) setEv(refreshRes.data);
+        return;
+      }
+    } else {
+      setBookingInProgress(false);
+    }
+
+    const successMessage = `Booking confirmed! Amount: ₹${(bookData.amountTotal / 100).toFixed(0)}. You can view all your bookings in My Bookings page.`;
     
     setBookingSuccess(successMessage);
     setAdditionalGuests([]);
@@ -421,7 +563,7 @@ export default function EventDetailPage({
       // Fetch event passes for the new booking
       setLoadingPass(true);
       const passesRes = await apiFetch<{ passes: Array<{ passId: string }> }>(
-        `/api/bookings/${res.data.bookingId}/passes`,
+        `/api/bookings/${bookData.bookingId}/passes`,
         {
           method: "GET",
           headers: { authorization: `Bearer ${token}` }
@@ -487,49 +629,50 @@ export default function EventDetailPage({
         <div className="grid gap-6 md:gap-8 grid-cols-1 md:grid-cols-[1.6fr_1fr]">
           <div className="space-y-6 min-w-0">
             <div className="overflow-hidden rounded-2xl sm:rounded-3xl border border-sand-200 bg-white/60 shadow-card backdrop-blur">
-              {/* Media Slideshow */}
-              {(eventImages.length > 0 || eventVideos.length > 0) ? (
+              {/* Media slideshow: event + venue + host images when the host added any */}
+              {heroSlides.length > 0 ? (
                 <div className="relative h-56 sm:h-72 w-full overflow-hidden">
-                  {/* Slides */}
                   <div className="relative h-full w-full">
-                    {[...eventImages, ...eventVideos].map((media, idx) => (
-                      <div
-                        key={idx}
-                        className={`absolute inset-0 h-full w-full transition-opacity duration-1000 ${
-                          idx === currentSlideIndex ? "opacity-100 z-10" : "opacity-0 z-0"
-                        }`}
-                      >
-                        {media.filePath.startsWith("event-images/") ? (
-                          <img
-                            src={`/api/upload/serve?path=${encodeURIComponent(media.filePath)}`}
-                            alt={media.fileName}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <video
-                            src={`/api/upload/serve?path=${encodeURIComponent(media.filePath)}`}
-                            className="h-full w-full object-cover"
-                            autoPlay
-                            muted
-                            loop
-                            playsInline
-                            onEnded={() => {
-                              // Move to next slide when video ends
-                              const total = eventImages.length + eventVideos.length;
-                              setCurrentSlideIndex((prev) => (prev + 1) % total);
-                            }}
-                          />
-                        )}
-                      </div>
-                    ))}
+                    {heroSlides.map((media, idx) => {
+                      const isVideo = (media.fileMime || "").startsWith("video/");
+                      return (
+                        <div
+                          key={`${media.filePath}-${idx}`}
+                          className={`absolute inset-0 h-full w-full transition-opacity duration-1000 ${
+                            idx === currentSlideIndex ? "opacity-100 z-10" : "opacity-0 z-0"
+                          }`}
+                        >
+                          {isVideo ? (
+                            <video
+                              src={`/api/upload/serve?path=${encodeURIComponent(media.filePath)}`}
+                              className="h-full w-full object-cover"
+                              autoPlay
+                              muted
+                              loop
+                              playsInline
+                              onEnded={() => {
+                                const total = heroSlides.length;
+                                setCurrentSlideIndex((prev) => (prev + 1) % total);
+                              }}
+                            />
+                          ) : (
+                            <img
+                              src={`/api/upload/serve?path=${encodeURIComponent(media.filePath)}`}
+                              alt={media.fileName}
+                              className="h-full w-full object-cover"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
 
-                  {/* Navigation Dots */}
-                  {eventImages.length + eventVideos.length > 1 && (
+                  {heroSlides.length > 1 && (
                     <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-2">
-                      {[...eventImages, ...eventVideos].map((_, idx) => (
+                      {heroSlides.map((_, idx) => (
                         <button
                           key={idx}
+                          type="button"
                           onClick={() => setCurrentSlideIndex(idx)}
                           className={`h-2 rounded-full transition-all ${
                             idx === currentSlideIndex
@@ -542,12 +685,12 @@ export default function EventDetailPage({
                     </div>
                   )}
 
-                  {/* Previous/Next Buttons */}
-                  {eventImages.length + eventVideos.length > 1 && (
+                  {heroSlides.length > 1 && (
                     <>
                       <button
+                        type="button"
                         onClick={() => {
-                          const total = eventImages.length + eventVideos.length;
+                          const total = heroSlides.length;
                           setCurrentSlideIndex((prev) => (prev - 1 + total) % total);
                         }}
                         className="absolute left-4 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/30 p-2 text-white backdrop-blur-sm transition hover:bg-black/50"
@@ -558,8 +701,9 @@ export default function EventDetailPage({
                         </svg>
                       </button>
                       <button
+                        type="button"
                         onClick={() => {
-                          const total = eventImages.length + eventVideos.length;
+                          const total = heroSlides.length;
                           setCurrentSlideIndex((prev) => (prev + 1) % total);
                         }}
                         className="absolute right-4 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/30 p-2 text-white backdrop-blur-sm transition hover:bg-black/50"
@@ -869,39 +1013,19 @@ export default function EventDetailPage({
               </div>
             )}
 
-            {/* Venue Address and Location */}
+            {/* Venue — listing-style “Where you’ll go” + Leaflet (OSM) */}
             {ev.venueAddress && (
-              <div className="rounded-3xl border border-sand-200 bg-white/60 shadow-card backdrop-blur p-6">
-                <h3 className="mb-4 text-lg font-semibold text-ink-900">Venue Location</h3>
-                <div className="space-y-4">
-                  <div>
-                    <div className="text-sm font-medium text-ink-700 mb-1">Address</div>
-                    <div className="text-sm text-ink-900">{ev.venueAddress}</div>
-                    {(ev.locality || ev.city || ev.state) && (
-                      <div className="text-sm text-ink-600 mt-1">
-                        {[ev.locality, ev.city, ev.state].filter(Boolean).join(", ")}
-                        {ev.postalCode && ` - ${ev.postalCode}`}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Map */}
-                  {ev.venueLatitude !== null && ev.venueLatitude !== undefined && 
-                   ev.venueLongitude !== null && ev.venueLongitude !== undefined && (
-                    <div className="mt-4">
-                      <AddressMap
-                        address={ev.venueAddress}
-                        latitude={ev.venueLatitude}
-                        longitude={ev.venueLongitude}
-                        editable={false}
-                        onLocationSelect={() => {
-                          // No-op in view mode
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
+              <VenueWhereYoullGoSection
+                venueName={ev.venueName}
+                venueAddress={ev.venueAddress}
+                locality={ev.locality}
+                city={ev.city}
+                state={ev.state}
+                country={ev.country}
+                postalCode={ev.postalCode}
+                latitude={ev.venueLatitude}
+                longitude={ev.venueLongitude}
+              />
             )}
 
             {/* Venue Images */}
@@ -1069,7 +1193,9 @@ export default function EventDetailPage({
                       variant="outline"
                       asChild
                     >
-                      <Link href={`/messages/${ev.id}`}>
+                      <Link
+                        href={`/messages/${ev.id}?bookingId=${existingBooking.bookingId}`}
+                      >
                         💬 Chat with Host
                       </Link>
                     </Button>

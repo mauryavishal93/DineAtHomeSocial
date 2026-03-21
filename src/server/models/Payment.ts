@@ -16,7 +16,13 @@ const PaymentSchema = new Schema(
     razorpayOrderId: { type: String, default: "", index: true },
     razorpayPaymentId: { type: String, default: "", index: true },
     razorpaySignature: { type: String, default: "" },
-    webhookPayload: { type: Schema.Types.Mixed, default: null }
+    paidAt: { type: Date, default: null },
+    refundedAt: { type: Date, default: null },
+    refundAmount: { type: Number, default: 0 },
+    webhookPayload: { type: Schema.Types.Mixed, default: null },
+    /** Set for add-on seat payments so checkout dismiss can roll back seats + guests */
+    addonSeats: { type: Number, default: null },
+    addonGuestMobiles: { type: [String], default: undefined }
   },
   { timestamps: true }
 );

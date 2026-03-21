@@ -46,7 +46,9 @@ const GuestProfileSchema = new Schema(
     
     // Credits & rewards
     walletBalance: { type: Number, default: 0 }, // in paise
-    referralCode: { type: String, default: "", unique: true, sparse: true },
+    // Omit field until generated (e.g. /api/referrals). Do not default to "" — sparse unique
+    // still indexes empty string and causes E11000 duplicate key for every new user.
+    referralCode: { type: String, unique: true, sparse: true },
     totalReferrals: { type: Number, default: 0 },
     
     // Verification

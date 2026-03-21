@@ -34,8 +34,12 @@ export async function GET(req: Request) {
     console.error("Error stack:", stack);
     
     const lowerMsg = msg.toLowerCase();
-    if (lowerMsg.includes("missing token") || lowerMsg.includes("invalid")) {
-      return unauthorized("Invalid or missing authentication token");
+    if (
+      lowerMsg.includes("missing token") ||
+      lowerMsg.includes("invalid") ||
+      lowerMsg.includes("expired")
+    ) {
+      return unauthorized("Invalid or expired authentication token");
     }
     return serverError(`Failed to get user info: ${msg}`);
   }

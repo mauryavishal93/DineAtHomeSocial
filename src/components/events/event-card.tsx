@@ -218,7 +218,7 @@ export function EventCard({ ev }: { ev: UIEvent }) {
 
         <div className="mt-4 flex items-center justify-between border-t-2 border-gradient-to-r from-violet-200 via-pink-200 to-orange-200 bg-gradient-to-r from-violet-50/50 via-pink-50/50 to-orange-50/50 pt-3 px-2 -mx-2 -mb-2 rounded-b-2xl sm:rounded-b-3xl">
           <span className="text-xs font-medium text-ink-700">Tap to view details & book</span>
-          <span className="rounded-full border-2 border-violet-300 bg-gradient-to-r from-violet-100 to-pink-100 px-3 py-1 text-xs font-semibold text-violet-800 shadow-sm">
+          <span className="shrink-0 whitespace-nowrap rounded-full border-2 border-violet-300 bg-gradient-to-r from-violet-100 to-pink-100 px-3 py-1 text-xs font-semibold text-violet-800 shadow-sm">
             {mounted ? dateLabel : "..."}
           </span>
         </div>

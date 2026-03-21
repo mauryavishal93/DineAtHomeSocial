@@ -6,8 +6,85 @@ import { EventSlot } from "@/server/models/EventSlot";
 import { Booking } from "@/server/models/Booking";
 import { User } from "@/server/models/User";
 import { createResponse } from "@/server/http/response";
+import { buildChatThreadFilter } from "@/server/services/chatThread";
 
-// Get messages for an event
+const BOOKING_OK = ["CONFIRMED", "PAYMENT_PENDING"] as const;
+
+async function resolveThreadAccess(
+  ctx: { userId: string; role: string },
+  eventSlotId: string,
+  bookingIdParam: string | null
+): Promise<
+  | { ok: true; booking: any; eventDoc: any; isHost: boolean; threadFilter: ReturnType<typeof buildChatThreadFilter> }
+  | { ok: false; status: number; error: string }
+> {
+  const event = await EventSlot.findById(eventSlotId).lean();
+  if (!event) {
+    return { ok: false, status: 404, error: "Event not found" };
+  }
+
+  const eventDoc = event as any;
+  const isHost = String(eventDoc.hostUserId) === String(ctx.userId);
+
+  let booking: any = null;
+
+  if (isHost) {
+    if (!bookingIdParam) {
+      return { ok: false, status: 400, error: "bookingId is required for host chat" };
+    }
+    booking = await Booking.findOne({
+      _id: bookingIdParam,
+      eventSlotId,
+      hostUserId: ctx.userId
+    }).lean();
+  } else {
+    if (bookingIdParam) {
+      booking = await Booking.findOne({
+        _id: bookingIdParam,
+        eventSlotId,
+        guestUserId: ctx.userId
+      }).lean();
+    } else {
+      booking = await Booking.findOne({
+        eventSlotId,
+        guestUserId: ctx.userId
+      }).lean();
+    }
+  }
+
+  if (!booking) {
+    return { ok: false, status: 403, error: "Access denied" };
+  }
+
+  const bookingDoc = booking as any;
+  if (bookingDoc.status === "CANCELLED") {
+    return {
+      ok: false,
+      status: 403,
+      error: "Chat is closed. Your booking for this event has been cancelled."
+    };
+  }
+  if (!BOOKING_OK.includes(bookingDoc.status)) {
+    return { ok: false, status: 403, error: "Access denied" };
+  }
+
+  const threadFilter = buildChatThreadFilter({
+    eventSlotId,
+    bookingId: String(bookingDoc._id),
+    hostUserId: String(bookingDoc.hostUserId),
+    guestUserId: String(bookingDoc.guestUserId)
+  });
+
+  return {
+    ok: true,
+    booking: bookingDoc,
+    eventDoc,
+    isHost,
+    threadFilter
+  };
+}
+
+// Get messages for a host–guest thread (per booking)
 export async function GET(req: NextRequest) {
   try {
     const ctx = await requireAuth(req);
@@ -15,108 +92,92 @@ export async function GET(req: NextRequest) {
 
     const url = new URL(req.url);
     const eventSlotId = url.searchParams.get("eventSlotId");
+    const bookingIdParam = url.searchParams.get("bookingId");
 
     if (!eventSlotId) {
       return createResponse({ error: "eventSlotId is required" }, { status: 400 });
     }
 
-    // Verify user has access to this event (either host or guest with booking)
-    const event = await EventSlot.findById(eventSlotId).lean();
-    if (!event) {
-      return createResponse({ error: "Event not found" }, { status: 404 });
+    const access = await resolveThreadAccess(ctx, eventSlotId, bookingIdParam);
+    if (!access.ok) {
+      return createResponse({ error: access.error }, { status: access.status });
     }
 
-    const eventDoc = event as any;
-    const isHost = String(eventDoc.hostUserId) === String(ctx.userId);
-    
-    // Check if event has ended
+    const { eventDoc, booking, isHost, threadFilter } = access;
+
+    const isEventCancelled = eventDoc.status === "CANCELLED";
     const eventEndTime = eventDoc.endAt ? new Date(eventDoc.endAt) : null;
-    const isEventEnded = eventEndTime && eventEndTime < new Date();
-    
-    if (!isHost) {
-      // Single query to check booking status (optimized)
-      const booking = await Booking.findOne({
-        eventSlotId,
-        guestUserId: ctx.userId
-      }).lean();
-      
-      if (!booking) {
-        return createResponse({ error: "Access denied" }, { status: 403 });
-      }
-      
-      const bookingDoc = booking as any;
-      
-      if (bookingDoc.status === "CANCELLED") {
-        return createResponse({ 
-          error: "Chat is closed. Your booking for this event has been cancelled." 
-        }, { status: 403 });
-      }
-      
-      if (!["CONFIRMED", "PAYMENT_PENDING", "COMPLETED"].includes(bookingDoc.status)) {
-        return createResponse({ error: "Access denied" }, { status: 403 });
+    const isPastEnd = eventEndTime && eventEndTime < new Date();
+    const chatClosed = isEventCancelled || isPastEnd;
+
+    let otherPartyName = "";
+    if (isHost) {
+      otherPartyName = booking.guestName || "Guest";
+    } else {
+      const hostUser = await User.findById(eventDoc.hostUserId).lean();
+      otherPartyName = (hostUser as any)?.name || "Host";
+      const { HostProfile } = await import("@/server/models/HostProfile");
+      const hostProfile = await HostProfile.findOne({ userId: eventDoc.hostUserId }).lean();
+      if (hostProfile) {
+        const hn = `${(hostProfile as any).firstName || ""} ${(hostProfile as any).lastName || ""}`.trim();
+        if (hn) otherPartyName = hn;
       }
     }
-    
-    // Return event status along with messages
-    const responseData: any = { 
-      isEventEnded: !!isEventEnded,
-      eventName: eventDoc.eventName || "Event"
-    };
-    
-    // Get messages
-    const messages = await ChatMessage.find({
-      eventSlotId,
-      isDeleted: false
-    })
-      .sort({ createdAt: 1 })
-      .limit(100)
-      .lean();
 
-    // Mark messages as read
+    const responseData: any = {
+      isEventEnded: chatClosed,
+      eventName: eventDoc.eventName || "Event",
+      otherPartyName,
+      bookingId: String(booking._id)
+    };
+
+    const messages = await ChatMessage.find(threadFilter).sort({ createdAt: 1 }).limit(200).lean();
+
     await ChatMessage.updateMany(
       {
-        eventSlotId,
+        ...threadFilter,
         senderUserId: { $ne: ctx.userId },
         readBy: { $ne: ctx.userId }
       },
-      {
-        $addToSet: { readBy: ctx.userId }
-      }
+      { $addToSet: { readBy: ctx.userId } }
     );
 
-    // Get sender details with proper registered names
     const messagesWithDetails = await Promise.all(
       messages.map(async (msg: any) => {
         const sender = await User.findById(msg.senderUserId).lean();
         const senderDoc = sender as any;
-        
-        // Get proper registered name based on role
+
         let registeredName = "Unknown";
         if (senderDoc) {
           if (senderDoc.role === "HOST") {
-            // For hosts, try to get from HostProfile
             const { HostProfile } = await import("@/server/models/HostProfile");
             const hostProfile = await HostProfile.findOne({ userId: msg.senderUserId }).lean();
             if (hostProfile) {
-              registeredName = `${(hostProfile as any).firstName || ""} ${(hostProfile as any).lastName || ""}`.trim() || senderDoc.name || "Host";
+              registeredName =
+                `${(hostProfile as any).firstName || ""} ${(hostProfile as any).lastName || ""}`.trim() ||
+                senderDoc.name ||
+                "Host";
             } else {
               registeredName = senderDoc.name || "Host";
             }
           } else {
-            // For guests, try to get from GuestProfile
             const { GuestProfile } = await import("@/server/models/GuestProfile");
             const guestProfile = await GuestProfile.findOne({ userId: msg.senderUserId }).lean();
             if (guestProfile) {
-              registeredName = `${(guestProfile as any).firstName || ""} ${(guestProfile as any).lastName || ""}`.trim() || senderDoc.name || "Guest";
+              registeredName =
+                `${(guestProfile as any).firstName || ""} ${(guestProfile as any).lastName || ""}`.trim() ||
+                senderDoc.name ||
+                "Guest";
             } else {
               registeredName = senderDoc.name || "Guest";
             }
           }
         }
-        
+
         return {
           id: String(msg._id),
           eventSlotId: String(msg.eventSlotId),
+          bookingId: msg.bookingId ? String(msg.bookingId) : "",
           senderUserId: String(msg.senderUserId),
           senderName: registeredName,
           senderRole: msg.senderRole,
@@ -136,158 +197,123 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Send a message
+// Send a message (stored ciphertext if client sends ENC1:... payload)
 export async function POST(req: NextRequest) {
   try {
     const ctx = await requireAuth(req);
     await connectMongo();
 
     const body = await req.json();
-    const { eventSlotId, message, messageType = "TEXT", imageUrl = "" } = body;
+    const { eventSlotId, bookingId: bookingIdBody, message, messageType = "TEXT", imageUrl = "" } = body;
 
     if (!eventSlotId || !message) {
       return createResponse({ error: "eventSlotId and message are required" }, { status: 400 });
     }
 
-    // Verify user has access to this event
-    const event = await EventSlot.findById(eventSlotId).lean();
-    if (!event) {
-      return createResponse({ error: "Event not found" }, { status: 404 });
+    const access = await resolveThreadAccess(ctx, eventSlotId, bookingIdBody ? String(bookingIdBody) : null);
+    if (!access.ok) {
+      return createResponse({ error: access.error }, { status: access.status });
     }
 
-    const eventDoc = event as any;
-    const isHost = String(eventDoc.hostUserId) === String(ctx.userId);
-    
-    // Check if event has ended - if so, disable sending messages
+    const { eventDoc, booking, isHost } = access;
+
+    if (eventDoc.status === "CANCELLED") {
+      return createResponse({ error: "Chat is closed. This event has been cancelled." }, { status: 403 });
+    }
+
     const eventEndTime = eventDoc.endAt ? new Date(eventDoc.endAt) : null;
-    const isEventEnded = eventEndTime && eventEndTime < new Date();
-    
-    if (isEventEnded) {
+    if (eventEndTime && eventEndTime < new Date()) {
       return createResponse({ error: "Chat is closed. This event has ended." }, { status: 403 });
     }
-    
-    if (!isHost) {
-      // Single query to check booking status (optimized)
-      const booking = await Booking.findOne({
-        eventSlotId,
-        guestUserId: ctx.userId
-      }).lean();
-      
-      if (!booking) {
-        return createResponse({ error: "Access denied" }, { status: 403 });
-      }
-      
-      const bookingDoc = booking as any;
-      
-      if (bookingDoc.status === "CANCELLED") {
-        return createResponse({ 
-          error: "Chat is closed. Your booking for this event has been cancelled." 
-        }, { status: 403 });
-      }
-      
-      if (!["CONFIRMED", "PAYMENT_PENDING", "COMPLETED"].includes(bookingDoc.status)) {
-        return createResponse({ error: "Access denied" }, { status: 403 });
-      }
-    }
 
-    // Get user details with proper registered name
     const user = await User.findById(ctx.userId).lean();
     const userDoc = user as any;
-    
+
     let registeredName = "Unknown";
     if (userDoc) {
       if (ctx.role === "HOST") {
-        // For hosts, get from HostProfile
         const { HostProfile } = await import("@/server/models/HostProfile");
         const hostProfile = await HostProfile.findOne({ userId: ctx.userId }).lean();
         if (hostProfile) {
-          registeredName = `${(hostProfile as any).firstName || ""} ${(hostProfile as any).lastName || ""}`.trim() || userDoc.name || "Host";
+          registeredName =
+            `${(hostProfile as any).firstName || ""} ${(hostProfile as any).lastName || ""}`.trim() ||
+            userDoc.name ||
+            "Host";
         } else {
           registeredName = userDoc.name || "Host";
         }
       } else {
-        // For guests, get from GuestProfile
         const { GuestProfile } = await import("@/server/models/GuestProfile");
         const guestProfile = await GuestProfile.findOne({ userId: ctx.userId }).lean();
         if (guestProfile) {
-          registeredName = `${(guestProfile as any).firstName || ""} ${(guestProfile as any).lastName || ""}`.trim() || userDoc.name || "Guest";
+          registeredName =
+            `${(guestProfile as any).firstName || ""} ${(guestProfile as any).lastName || ""}`.trim() ||
+            userDoc.name ||
+            "Guest";
         } else {
           registeredName = userDoc.name || "Guest";
         }
       }
     }
 
-    // Create message
     const chatMessage = await ChatMessage.create({
       eventSlotId,
+      bookingId: booking._id,
       senderUserId: ctx.userId,
       senderName: registeredName,
       senderRole: ctx.role,
       message,
       messageType,
       imageUrl,
-      readBy: [ctx.userId] // Sender has read their own message
+      readBy: [ctx.userId]
     });
 
-    // Create notifications for all participants in the conversation
     const { Notification } = await import("@/server/models/Notification");
-    const notificationPromises: Promise<any>[] = [];
-    
+
     if (isHost) {
-      // Notify all guests who have bookings for this event
-      const bookings = await Booking.find({ 
-        eventSlotId, 
-        status: { $in: ["CONFIRMED", "PAYMENT_PENDING"] } 
-      }).select("guestUserId").lean();
-      
-      const guestUserIds = [...new Set(bookings.map((b: any) => String(b.guestUserId)))];
-      
-      guestUserIds.forEach((guestId) => {
-        if (String(guestId) !== String(ctx.userId)) {
-          notificationPromises.push(
-            Notification.create({
-              userId: guestId,
-              title: "New Message",
-              message: `${registeredName} sent a message in "${eventDoc.eventName}" chat`,
-              type: "NEW_MESSAGE",
-              metadata: {
-                eventId: eventSlotId,
-                senderId: ctx.userId,
-                senderName: registeredName
-              },
-              isRead: false
-            })
-          );
-        }
+      await Notification.create({
+        userId: booking.guestUserId,
+        title: "New Message",
+        message: `${registeredName} sent you a private message about "${eventDoc.eventName}".`,
+        type: "NEW_MESSAGE",
+        relatedEventId: eventSlotId,
+        relatedBookingId: String(booking._id),
+        relatedUserId: ctx.userId,
+        metadata: {
+          eventId: eventSlotId,
+          bookingId: String(booking._id),
+          senderId: ctx.userId,
+          senderName: registeredName,
+          e2e: String(message).startsWith("ENC1:")
+        },
+        isRead: false
       });
     } else {
-      // Notify the host
-      if (String(eventDoc.hostUserId) !== String(ctx.userId)) {
-        notificationPromises.push(
-          Notification.create({
-            userId: eventDoc.hostUserId,
-            title: "New Message",
-            message: `${registeredName} sent a message in "${eventDoc.eventName}" chat`,
-            type: "NEW_MESSAGE",
-            metadata: {
-              eventId: eventSlotId,
-              senderId: ctx.userId,
-              senderName: registeredName
-            },
-            isRead: false
-          })
-        );
-      }
+      await Notification.create({
+        userId: eventDoc.hostUserId,
+        title: "New Message",
+        message: `${registeredName} sent you a private message about "${eventDoc.eventName}".`,
+        type: "NEW_MESSAGE",
+        relatedEventId: eventSlotId,
+        relatedBookingId: String(booking._id),
+        relatedUserId: ctx.userId,
+        metadata: {
+          eventId: eventSlotId,
+          bookingId: String(booking._id),
+          senderId: ctx.userId,
+          senderName: registeredName,
+          e2e: String(message).startsWith("ENC1:")
+        },
+        isRead: false
+      });
     }
-    
-    // Create all notifications in parallel
-    await Promise.all(notificationPromises);
 
     return createResponse({
       success: true,
       message: {
         id: String(chatMessage._id),
         eventSlotId: String(eventSlotId),
+        bookingId: String(booking._id),
         senderUserId: String(ctx.userId),
         senderName: registeredName,
         senderRole: ctx.role,

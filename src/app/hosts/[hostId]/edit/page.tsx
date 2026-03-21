@@ -281,6 +281,10 @@ export default function EditHostProfilePage() {
                   className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm"
                   required
                 />
+                <p className="mt-1 text-xs text-ink-600">
+                  Latitude and longitude update automatically on the map after you pause typing, or use{" "}
+                  <strong>Get Location</strong> / click the map.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-ink-700 mb-1">Locality</label>
@@ -373,13 +377,17 @@ export default function EditHostProfilePage() {
                   latitude={formData.latitude ? parseFloat(formData.latitude) : null}
                   longitude={formData.longitude ? parseFloat(formData.longitude) : null}
                   editable={true}
-                  onLocationSelect={(address, lat, lng) => {
-                    setFormData({
-                      ...formData,
+                  onLocationSelect={(newAddress, lat, lng, components) => {
+                    setFormData((prev) => ({
+                      ...prev,
                       latitude: lat.toString(),
                       longitude: lng.toString(),
-                      venueAddress: address || formData.venueAddress
-                    });
+                      venueAddress: newAddress?.trim() || prev.venueAddress,
+                      locality:
+                        components?.locality?.trim() && !prev.locality?.trim()
+                          ? components.locality.trim()
+                          : prev.locality
+                    }));
                   }}
                 />
               </div>

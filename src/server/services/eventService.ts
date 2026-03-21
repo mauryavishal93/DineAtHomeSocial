@@ -1,4 +1,18 @@
 import { connectMongo } from "@/server/db/mongoose";
+
+/** Venue stores coordinates on `geo.coordinates` as [lng, lat] (GeoJSON Point). */
+function venueLatLngFromGeo(venue: { geo?: { coordinates?: number[] } } | null | undefined): {
+  lat: number | null;
+  lng: number | null;
+} {
+  const c = venue?.geo?.coordinates;
+  if (!Array.isArray(c) || c.length !== 2) return { lat: null, lng: null };
+  const lng = Number(c[0]);
+  const lat = Number(c[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { lat: null, lng: null };
+  if (lat === 0 && lng === 0) return { lat: null, lng: null };
+  return { lat, lng };
+}
 import { EventSlot } from "@/server/models/EventSlot";
 import { Venue } from "@/server/models/Venue";
 import { HostProfile } from "@/server/models/HostProfile";
@@ -245,8 +259,23 @@ export async function listPublicEvents(filters?: {
   
   // Fetch host profiles and user status
   const hostProfiles = (await HostProfile.find({ userId: { $in: hostIds } })
-    .select({ userId: 1, name: 1, ratingAvg: 1, ratingCount: 1, isIdentityVerified: 1, governmentIdPath: 1 })
-    .lean()) as unknown as Array<{ userId: unknown; name?: string; ratingAvg?: number; isIdentityVerified?: boolean; governmentIdPath?: string }>;
+    .select({
+      userId: 1,
+      firstName: 1,
+      lastName: 1,
+      ratingAvg: 1,
+      ratingCount: 1,
+      isIdentityVerified: 1,
+      governmentIdPath: 1
+    })
+    .lean()) as unknown as Array<{
+    userId: unknown;
+    firstName?: string;
+    lastName?: string;
+    ratingAvg?: number;
+    isIdentityVerified?: boolean;
+    governmentIdPath?: string;
+  }>;
   
   // Fetch user statuses to filter out suspended hosts
   const users = await User.find({ _id: { $in: hostIds } })
@@ -257,7 +286,17 @@ export async function listPublicEvents(filters?: {
     userStatusByUserId.set(String((u as any)._id), (u as any).status);
   }
   
-  const hostByUserId = new Map<string, { name?: string; ratingAvg?: number; isIdentityVerified?: boolean; governmentIdPath?: string; status?: string }>();
+  const hostByUserId = new Map<
+    string,
+    {
+      firstName?: string;
+      lastName?: string;
+      ratingAvg?: number;
+      isIdentityVerified?: boolean;
+      governmentIdPath?: string;
+      status?: string;
+    }
+  >();
   for (const h of hostProfiles) {
     const userId = String(h.userId);
     const status = userStatusByUserId.get(userId);
@@ -282,6 +321,8 @@ export async function listPublicEvents(filters?: {
     return filteredSlots.map((s) => {
       const venue = (s as any).venueId as any;
       const host = hostByUserId.get(String((s as any).hostUserId));
+      const listHostName =
+        [host?.firstName, host?.lastName].filter(Boolean).join(" ").trim() || "Host";
       return {
         id: String((s as any)._id),
         title: (s as any).eventName ?? "",
@@ -294,7 +335,7 @@ export async function listPublicEvents(filters?: {
         locality: venue?.locality ?? "",
         state: venue?.state ?? "",
         venueName: venue?.name ?? "",
-        hostName: host?.name ?? "Host",
+        hostName: listHostName,
         hostUserId: String((s as any).hostUserId),
         hostRating: host?.ratingAvg ?? 0,
         verified: host?.isIdentityVerified ?? false,
@@ -317,13 +358,33 @@ export async function listPublicEvents(filters?: {
 export async function getPublicEventById(eventId: string) {
   await connectMongo();
   const slot = await EventSlot.findById(eventId)
-    .populate({ path: "venueId", select: "name address locality city state country postalCode foodCategories gamesAvailable images latitude longitude" })
+    .populate({
+      path: "venueId",
+      select:
+        "name address locality city state country postalCode foodCategories gamesAvailable images geo"
+    })
     .lean();
   if (!slot) return null;
 
   const host = (await HostProfile.findOne({ userId: (slot as any).hostUserId })
-    .select({ name: 1, ratingAvg: 1, isIdentityVerified: 1, governmentIdPath: 1 })
-    .lean()) as { name?: string; ratingAvg?: number; isIdentityVerified?: boolean; governmentIdPath?: string } | null;
+    .select({
+      firstName: 1,
+      lastName: 1,
+      ratingAvg: 1,
+      isIdentityVerified: 1,
+      governmentIdPath: 1,
+      profileImagePath: 1,
+      coverImagePath: 1
+    })
+    .lean()) as {
+    firstName?: string;
+    lastName?: string;
+    ratingAvg?: number;
+    isIdentityVerified?: boolean;
+    governmentIdPath?: string;
+    profileImagePath?: string;
+    coverImagePath?: string;
+  } | null;
   
   // Check if host is suspended
   const hostUser = await User.findById((slot as any).hostUserId)
@@ -337,6 +398,8 @@ export async function getPublicEventById(eventId: string) {
   }
 
   const venue = (slot as any).venueId as any;
+  const { lat: venueLat, lng: venueLng } = venueLatLngFromGeo(venue);
+  const hostDisplayName = [host?.firstName, host?.lastName].filter(Boolean).join(" ").trim();
   return {
     id: String((slot as any)._id),
     title: (slot as any).eventName ?? "",
@@ -353,13 +416,13 @@ export async function getPublicEventById(eventId: string) {
     postalCode: venue?.postalCode ?? "",
     venueName: venue?.name ?? "",
     venueAddress: venue?.address ?? "",
-    venueLatitude: venue?.latitude ?? null,
-    venueLongitude: venue?.longitude ?? null,
+    venueLatitude: venueLat,
+    venueLongitude: venueLng,
     foodTags: (slot as any).foodTags ?? [],
     cuisines: (slot as any).cuisines ?? venue?.foodCategories ?? [],
     foodType: (slot as any).foodType ?? "",
     activities: (slot as any).gamesAvailable ?? venue?.gamesAvailable ?? [],
-    hostName: host?.name ?? "Host",
+    hostName: hostDisplayName || "Host",
     hostRating: host?.ratingAvg ?? 0,
     hostUserId: String((slot as any).hostUserId ?? ""),
     verified: host?.isIdentityVerified ?? false,
@@ -369,10 +432,12 @@ export async function getPublicEventById(eventId: string) {
     cancellationReason: (slot as any).cancellationReason ?? "",
     eventImages: (slot as any).images ?? [],
     eventVideos: (slot as any).videos ?? [],
-    venueImages: venue?.images ?? []
+    venueImages: venue?.images ?? [],
+    hostProfileImagePath: String(host?.profileImagePath ?? "").trim(),
+    hostCoverImagePath: String(host?.coverImagePath ?? "").trim(),
+    hostStatus
   };
 }
-
 export async function listHostEventsWithBookings(hostUserId: string) {
   await connectMongo();
 
