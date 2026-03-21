@@ -19,7 +19,7 @@ Next.js must run **`next build`** during the **Build** step so `.next` exists be
    npm install --include=dev && npm run build
    ```
 
-   This repo keeps **Tailwind, PostCSS, and TypeScript** in `dependencies` so `npm install` alone is enough. Production build uses **`next build --webpack`** to avoid Turbopack/PostCSS issues on some hosts (e.g. Render).
+   This repo keeps **Tailwind, PostCSS, TypeScript, and `@types/*`** in `dependencies` so a plain `npm install` on Render (which often skips `devDependencies`) still runs `next build` + the TypeScript step. Production build uses **`next build --webpack`** to avoid Turbopack/PostCSS issues on some hosts.
 
 3. **Start Command** (should match `package.json`):
 
