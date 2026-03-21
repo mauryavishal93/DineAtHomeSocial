@@ -1,14 +1,20 @@
 "use client";
 
+/**
+ * Venue / event maps: **Leaflet** + **react-leaflet** (client-only; no SSR).
+ * Basemap: CARTO Light (OSM data) — see `leaflet-tiles.ts` and `globals.css` (leaflet.css).
+ */
 import React, { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch } from "@/lib/http";
+import { isValidLatLng } from "@/lib/geo";
+import {
+  LEAFLET_DEFAULT_ATTRIBUTION,
+  LEAFLET_DEFAULT_TILE_URL
+} from "./leaflet-tiles";
 
 // Import Leaflet types only (no runtime import to avoid SSR issues)
 import type { LatLngExpression } from "leaflet";
-
-// Global registry to track initialized map keys (prevents re-initialization)
-const initializedMapKeys = new Set<string>();
 
 // Dynamically import Leaflet components to avoid SSR issues - with explicit no SSR
 const MapContainer = dynamic(
@@ -48,6 +54,10 @@ interface AddressMapProps {
     }
   ) => void;
   editable?: boolean;
+  /** If true (view mode only), forward-geocode `address` when lat/lng are missing. */
+  allowAddressGeocode?: boolean;
+  /** View mode: wrapper around the Leaflet map (default `aspect-video …`). */
+  mapContainerClassName?: string;
 }
 
 // Component to handle map click events - must be a separate component to use hooks
@@ -63,6 +73,78 @@ const MapClickHandler = dynamic(
             onMapClick(lat, lng);
           },
         });
+        return null;
+      };
+    }),
+  { ssr: false }
+);
+
+/** Like vanilla `map.setView([lat, lon], zoom)` after a pick — pans/zooms when the marker moves. */
+function latLngTuple(expr: LatLngExpression | null): [number, number] | null {
+  if (expr == null) return null;
+  if (Array.isArray(expr)) return [Number(expr[0]), Number(expr[1])];
+  const o = expr as { lat: number; lng: number };
+  return [Number(o.lat), Number(o.lng)];
+}
+
+/** Leaflet measures the container on init; if layout wasn’t final yet, tiles stay blank until invalidateSize. */
+const MapInvalidateSize = dynamic(
+  () =>
+    import("react-leaflet").then((mod) => {
+      const { useMap } = mod;
+      return function MapInvalidateSizeInner() {
+        const map = useMap();
+        useEffect(() => {
+          const fix = () => {
+            try {
+              map.invalidateSize();
+            } catch {
+              /* map torn down */
+            }
+          };
+          fix();
+          const raf = requestAnimationFrame(fix);
+          const t1 = setTimeout(fix, 100);
+          const t2 = setTimeout(fix, 400);
+          window.addEventListener("resize", fix);
+          return () => {
+            cancelAnimationFrame(raf);
+            clearTimeout(t1);
+            clearTimeout(t2);
+            window.removeEventListener("resize", fix);
+          };
+        }, [map]);
+        return null;
+      };
+    }),
+  { ssr: false }
+);
+
+const MapFlyToMarker = dynamic(
+  () =>
+    import("react-leaflet").then((mod) => {
+      const { useMap } = mod;
+      return function MapFlyToMarkerInner({
+        position,
+        zoom,
+      }: {
+        position: LatLngExpression | null;
+        zoom: number;
+      }) {
+        const map = useMap();
+        const lastKeyRef = useRef<string>("");
+        useEffect(() => {
+          const t = latLngTuple(position);
+          if (!t) {
+            lastKeyRef.current = "";
+            return;
+          }
+          const key = `${t[0]},${t[1]},${zoom}`;
+          if (lastKeyRef.current === key) return;
+          lastKeyRef.current = key;
+          // Sample used setView; flyTo is smoother for repeated picks.
+          map.flyTo(t, zoom, { duration: 0.45 });
+        }, [map, position, zoom]);
         return null;
       };
     }),
@@ -85,14 +167,6 @@ function SingleUseMapContainer({
   mapKey: string;
   onInitialized: () => void;
 }) {
-  // Check global registry - if this key was already used, don't render
-  if (initializedMapKeys.has(mapKey)) {
-    return <div style={{ height: "100%", width: "100%", background: "transparent" }} />;
-  }
-
-  // Mark as initialized immediately
-  initializedMapKeys.add(mapKey);
-
   // Call onInitialized after a brief delay
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -119,14 +193,23 @@ export function AddressMap({
   latitude,
   longitude,
   onLocationSelect,
-  editable = false
+  editable = false,
+  allowAddressGeocode = false,
+  mapContainerClassName = "aspect-video rounded-lg overflow-hidden border border-sand-200"
 }: AddressMapProps) {
   const [mounted, setMounted] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [geocodeError, setGeocodeError] = useState<string | null>(null);
+  /** View mode: coordinates from /api/geocode when API did not store geo on venue */
+  const [viewResolved, setViewResolved] = useState<{ lat: number; lng: number } | null>(null);
+  const [viewGeocodeStatus, setViewGeocodeStatus] = useState<"idle" | "loading" | "done" | "error">(
+    "idle"
+  );
   const [mapCenter, setMapCenter] = useState<LatLngExpression>([20.5937, 78.9629]); // Default to India center
   const [markerPosition, setMarkerPosition] = useState<LatLngExpression | null>(null);
   const [reverseGeocoding, setReverseGeocoding] = useState(false);
+  /** Mirrors sample: fill "search" / preview with reverse- or forward-geocode display_name-style text */
+  const [mapResolvedAddress, setMapResolvedAddress] = useState(address);
   const [shouldRenderMap, setShouldRenderMap] = useState(false);
   // Use refs to track state that shouldn't cause re-renders
   const mapKeyRef = useRef<string | null>(null);
@@ -138,6 +221,10 @@ export function AddressMap({
   if (mapKeyRef.current === null) {
     mapKeyRef.current = `map-${editable ? 'edit' : 'view'}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
+
+  useEffect(() => {
+    setMapResolvedAddress(address);
+  }, [address]);
 
   // Only set initial state after mount to avoid hydration mismatch
   useEffect(() => {
@@ -158,9 +245,7 @@ export function AddressMap({
       
       // Delay map rendering slightly to ensure DOM is ready and prevent re-initialization
       const timer = setTimeout(() => {
-        if (!mapRenderedRef.current && !mapInitializedRef.current) {
-          setShouldRenderMap(true);
-        }
+        setShouldRenderMap(true);
       }, 150);
       
       return () => {
@@ -173,30 +258,79 @@ export function AddressMap({
     }
   }, []);
 
-  // Update map center and marker when coordinates change
+  const hasPropCoords = isValidLatLng(latitude, longitude);
+  const effectiveLat =
+    hasPropCoords ? latitude! : !editable && allowAddressGeocode ? viewResolved?.lat ?? null : null;
+  const effectiveLng =
+    hasPropCoords ? longitude! : !editable && allowAddressGeocode ? viewResolved?.lng ?? null : null;
+  const hasEffectiveCoords = isValidLatLng(effectiveLat, effectiveLng);
+
+  // View mode: resolve pin from address when coordinates missing
   useEffect(() => {
-    if (mounted && latitude !== null && longitude !== null && 
-        typeof latitude === "number" && typeof longitude === "number" &&
-        !isNaN(latitude) && !isNaN(longitude) &&
-        isFinite(latitude) && isFinite(longitude)) {
-      const position: LatLngExpression = [latitude, longitude];
+    if (editable || !allowAddressGeocode) return;
+    if (hasPropCoords) {
+      setViewResolved(null);
+      setViewGeocodeStatus("idle");
+      return;
+    }
+    const addr = address?.trim();
+    if (!addr || addr.length < 8) {
+      setViewResolved(null);
+      setViewGeocodeStatus("error");
+      return;
+    }
+    let cancelled = false;
+    setViewGeocodeStatus("loading");
+    setViewResolved(null);
+    (async () => {
+      try {
+        const res = await apiFetch<{ latitude: number; longitude: number }>(
+          `/api/geocode?address=${encodeURIComponent(addr)}`
+        );
+        if (cancelled) return;
+        if (res.ok && res.data && isValidLatLng(res.data.latitude, res.data.longitude)) {
+          setViewResolved({ lat: res.data.latitude, lng: res.data.longitude });
+          setViewGeocodeStatus("done");
+        } else {
+          setViewGeocodeStatus("error");
+        }
+      } catch {
+        if (!cancelled) setViewGeocodeStatus("error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editable, allowAddressGeocode, hasPropCoords, address, latitude, longitude]);
+
+  // Sync map center / marker from props (editable) or resolved view coords (guest)
+  useEffect(() => {
+    if (!mounted) return;
+    if (editable) {
+      if (hasPropCoords) {
+        const position: LatLngExpression = [latitude!, longitude!];
+        setMapCenter(position);
+        setMarkerPosition(position);
+      }
+      return;
+    }
+    if (hasEffectiveCoords && effectiveLat !== null && effectiveLng !== null) {
+      const position: LatLngExpression = [effectiveLat, effectiveLng];
       setMapCenter(position);
       setMarkerPosition(position);
-    } else if (mounted) {
+    } else {
       setMarkerPosition(null);
     }
-  }, [latitude, longitude, mounted]);
-
-  // Mark map as rendered after it's been displayed to prevent re-initialization
-  useEffect(() => {
-    if (shouldRenderMap && !mapRenderedRef.current) {
-      const timer = setTimeout(() => {
-        mapRenderedRef.current = true;
-        mapInitializedRef.current = true;
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [shouldRenderMap]);
+  }, [
+    mounted,
+    editable,
+    hasPropCoords,
+    latitude,
+    longitude,
+    hasEffectiveCoords,
+    effectiveLat,
+    effectiveLng
+  ]);
 
   // Track previous address to detect changes
   const previousAddressRef = useRef<string>("");
@@ -269,9 +403,11 @@ export function AddressMap({
       if (res.ok && res.data) {
         const { latitude: lat, longitude: lng, formattedAddress, locality, city, state, country, postalCode } = res.data;
         const position: LatLngExpression = [lat, lng];
+        const line = formattedAddress || addressToGeocode;
+        setMapResolvedAddress(line);
         setMapCenter(position);
         setMarkerPosition(position);
-        onLocationSelect(formattedAddress || addressToGeocode, lat, lng, {
+        onLocationSelect(line, lat, lng, {
           locality: locality || "",
           city: city || "",
           state: state || "",
@@ -304,6 +440,11 @@ export function AddressMap({
     }
   }
 
+  /**
+   * Same flow as vanilla Leaflet sample: map click → reverse geocode → center map, one marker, popup + filled input.
+   * We call `/api/geocode?latitude=&longitude=` (Nominatim on the server with a proper User-Agent) instead of
+   * browser `fetch` to nominatim.openstreetmap.org to respect usage policy.
+   */
   async function handleMapClick(lat: number, lng: number) {
     if (!editable) return;
 
@@ -326,9 +467,11 @@ export function AddressMap({
       if (res.ok && res.data) {
         const { formattedAddress, locality, city, state, country, postalCode } = res.data;
         const position: LatLngExpression = [lat, lng];
+        const line = formattedAddress || `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        setMapResolvedAddress(line);
         setMarkerPosition(position);
         setMapCenter(position);
-        onLocationSelect(formattedAddress || `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`, lat, lng, {
+        onLocationSelect(line, lat, lng, {
           locality: locality || "",
           city: city || "",
           state: state || "",
@@ -338,16 +481,20 @@ export function AddressMap({
       } else {
         // If reverse geocoding fails, still allow setting coordinates
         const position: LatLngExpression = [lat, lng];
+        const fallback = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        setMapResolvedAddress(fallback);
         setMarkerPosition(position);
         setMapCenter(position);
-        onLocationSelect(`Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`, lat, lng);
+        onLocationSelect(fallback, lat, lng);
       }
     } catch (error) {
       // If reverse geocoding fails, still allow setting coordinates
       const position: LatLngExpression = [lat, lng];
+      const fallback = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      setMapResolvedAddress(fallback);
       setMarkerPosition(position);
       setMapCenter(position);
-      onLocationSelect(`Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`, lat, lng);
+      onLocationSelect(fallback, lat, lng);
     } finally {
       setReverseGeocoding(false);
     }
@@ -363,14 +510,20 @@ export function AddressMap({
       );
     }
 
-    // Ensure we have valid coordinates before rendering map
-    if (latitude === null || longitude === null || 
-        typeof latitude !== "number" || typeof longitude !== "number" ||
-        isNaN(latitude) || isNaN(longitude) ||
-        !isFinite(latitude) || !isFinite(longitude)) {
+    if (!hasEffectiveCoords) {
+      if (allowAddressGeocode && viewGeocodeStatus === "loading") {
+        return (
+          <div className="w-full h-64 rounded-lg border border-sand-200 bg-sand-100 flex items-center justify-center text-sm text-ink-600">
+            Finding location on map…
+          </div>
+        );
+      }
       return (
-        <div className="w-full h-64 rounded-lg border border-sand-200 bg-sand-100 flex items-center justify-center text-sm text-ink-600">
-          No location set
+        <div className="w-full h-64 rounded-lg border border-sand-200 bg-sand-100 flex flex-col items-center justify-center gap-1 px-4 text-center text-sm text-ink-600">
+          <span>No pin on map yet.</span>
+          {allowAddressGeocode && viewGeocodeStatus === "error" && address?.trim() && (
+            <span className="text-xs text-ink-500">Could not place this address automatically.</span>
+          )}
         </div>
       );
     }
@@ -384,21 +537,18 @@ export function AddressMap({
       );
     }
 
-    // Check if map container already has a Leaflet map instance
-    const canRenderMap = mounted && 
-                        typeof window !== "undefined" && 
-                        shouldRenderMap && 
-                        mapKeyRef.current && 
-                        !mapRenderedRef.current && 
-                        !mapInitializedRef.current &&
-                        (!mapContainerRef.current || !(mapContainerRef.current as any)._leaflet_id);
+    const canRenderMap =
+      mounted &&
+      typeof window !== "undefined" &&
+      shouldRenderMap &&
+      Boolean(mapKeyRef.current);
 
     return (
       <div className="space-y-3">
         <div 
           ref={mapContainerRef}
           key={`map-wrapper-${mapKeyRef.current}`} 
-          className="aspect-video rounded-lg overflow-hidden border border-sand-200"
+          className={`relative min-h-0 ${mapContainerClassName}`}
         >
           {canRenderMap && mapKeyRef.current ? (
             <SingleUseMapContainer
@@ -411,27 +561,43 @@ export function AddressMap({
                 mapRenderedRef.current = true;
               }}
             >
+              <MapInvalidateSize />
               <TileLayer
-                attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
-                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                attribution={LEAFLET_DEFAULT_ATTRIBUTION}
+                url={LEAFLET_DEFAULT_TILE_URL}
+                subdomains="abcd"
+                maxZoom={19}
               />
+              <MapFlyToMarker position={markerPosition} zoom={15} />
               {markerPosition && (
-                <Marker position={markerPosition}>
+                <Marker
+                  key={`view-${String(latLngTuple(markerPosition)?.[0])}-${String(latLngTuple(markerPosition)?.[1])}-${(mapResolvedAddress || address || "").slice(0, 64)}`}
+                  position={markerPosition}
+                  eventHandlers={{
+                    add: (e) => {
+                      e.target.openPopup();
+                    },
+                  }}
+                >
                   <Popup>
                     <div className="text-sm">
                       <strong>Location</strong>
                       <br />
-                      {address || "Selected location"}
+                      {mapResolvedAddress || address || "Selected location"}
                     </div>
                   </Popup>
                 </Marker>
               )}
             </SingleUseMapContainer>
           ) : !shouldRenderMap ? (
-            <div className="w-full h-full bg-sand-100 flex items-center justify-center text-sm text-ink-600">
+            <div className="flex min-h-[240px] w-full items-center justify-center bg-sand-100 text-sm text-ink-600">
               Loading map...
             </div>
-          ) : null}
+          ) : (
+            <div className="flex min-h-[240px] w-full items-center justify-center bg-sand-100 text-sm text-ink-600">
+              Preparing map…
+            </div>
+          )}
         </div>
       </div>
     );
@@ -455,8 +621,9 @@ export function AddressMap({
         </label>
         <div className="flex gap-2">
           <input
+            id="address-map-search-preview"
             type="text"
-            value={address}
+            value={mapResolvedAddress}
             readOnly
             placeholder="Enter address in the 'Venue address' field above..."
             className="flex-1 rounded-lg border border-sand-200 bg-sand-50 px-3 py-2 text-sm"
@@ -499,19 +666,12 @@ export function AddressMap({
       <div 
         ref={mapContainerRef}
         key={`map-wrapper-edit-${mapKeyRef.current}`} 
-        className="aspect-video rounded-lg overflow-hidden border border-sand-200"
+        className={`relative min-h-0 ${mapContainerClassName}`}
       >
-        {(() => {
-          // Check if map container already has a Leaflet map instance
-          const canRenderMap = mounted && 
-                              typeof window !== "undefined" && 
-                              shouldRenderMap && 
-                              mapKeyRef.current && 
-                              !mapRenderedRef.current && 
-                              !mapInitializedRef.current &&
-                              (!mapContainerRef.current || !(mapContainerRef.current as any)._leaflet_id);
-          return canRenderMap;
-        })() && mapKeyRef.current ? (
+        {mounted &&
+        typeof window !== "undefined" &&
+        shouldRenderMap &&
+        mapKeyRef.current ? (
           <SingleUseMapContainer
             center={mapCenter}
             zoom={markerPosition ? 15 : 5}
@@ -522,17 +682,29 @@ export function AddressMap({
               mapRenderedRef.current = true;
             }}
           >
+            <MapInvalidateSize />
             <TileLayer
-              attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+              attribution={LEAFLET_DEFAULT_ATTRIBUTION}
+              url={LEAFLET_DEFAULT_TILE_URL}
+              subdomains="abcd"
+              maxZoom={19}
             />
+            <MapFlyToMarker position={markerPosition} zoom={15} />
             {markerPosition && (
-              <Marker position={markerPosition}>
+              <Marker
+                key={`edit-${String(latLngTuple(markerPosition)?.[0])}-${String(latLngTuple(markerPosition)?.[1])}-${(mapResolvedAddress || "").slice(0, 64)}`}
+                position={markerPosition}
+                eventHandlers={{
+                  add: (e) => {
+                    e.target.openPopup();
+                  },
+                }}
+              >
                 <Popup>
                   <div className="text-sm">
-                    <strong>Selected Location</strong>
+                    <strong>Selected location</strong>
                     <br />
-                    {address || "Click on map to select"}
+                    {mapResolvedAddress || address || "Click map to pick a point"}
                   </div>
                 </Popup>
               </Marker>
@@ -540,10 +712,14 @@ export function AddressMap({
             <MapClickHandler onMapClick={handleMapClick} />
           </SingleUseMapContainer>
         ) : !shouldRenderMap ? (
-          <div className="w-full h-full bg-sand-100 flex items-center justify-center text-sm text-ink-600">
+          <div className="flex min-h-[240px] w-full items-center justify-center bg-sand-100 text-sm text-ink-600">
             Loading map...
           </div>
-        ) : null}
+        ) : (
+          <div className="flex min-h-[240px] w-full items-center justify-center bg-sand-100 text-sm text-ink-600">
+            Preparing map…
+          </div>
+        )}
       </div>
     </div>
   );

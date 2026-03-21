@@ -5,6 +5,8 @@ import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { apiFetch } from "@/lib/http";
+import { getAccessToken } from "@/lib/session";
 import Link from "next/link";
 
 const faqCategories = [
@@ -105,6 +107,7 @@ export default function SupportPage() {
     message: ""
   });
   const [showContactForm, setShowContactForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const filteredFAQs = faqCategories.flatMap(category => 
     category.questions.filter(q => 
@@ -115,10 +118,30 @@ export default function SupportPage() {
 
   const handleSubmitContact = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement contact form submission
-    alert("Thank you for contacting us! We'll get back to you within 24 hours.");
-    setContactForm({ name: "", email: "", subject: "", message: "" });
-    setShowContactForm(false);
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const token = getAccessToken();
+      const res = await apiFetch<{ success: boolean; message: string; ticketId?: string }>(
+        "/api/support/contact",
+        {
+          method: "POST",
+          headers: token ? { authorization: `Bearer ${token}` } : undefined,
+          body: JSON.stringify(contactForm)
+        }
+      );
+
+      if (!res.ok) {
+        alert(res.error || "Failed to submit your request. Please try again.");
+        return;
+      }
+
+      alert(res.data?.message || "Thank you for contacting us! We'll get back to you within 24 hours.");
+      setContactForm({ name: "", email: "", subject: "", message: "" });
+      setShowContactForm(false);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

@@ -1,6 +1,47 @@
+import nodemailer from "nodemailer";
 import { getEventPassById } from "./eventPassService";
 import { EventPass } from "@/server/models/EventPass";
 import { connectMongo } from "@/server/db/mongoose";
+
+type SendEmailInput = {
+  to: string;
+  subject: string;
+  html: string;
+};
+
+function getSmtpConfig() {
+  const host = process.env.SMTP_HOST;
+  const port = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : undefined;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (!host || !port || !user || !pass) return null;
+  return { host, port, user, pass };
+}
+
+export async function sendEmail({ to, subject, html }: SendEmailInput): Promise<boolean> {
+  const from = process.env.EMAIL_FROM || "noreply@dineathomesocial.com";
+  const cfg = getSmtpConfig();
+
+  // If SMTP isn't configured, fall back to dev logging (non-breaking)
+  if (!cfg) {
+    console.log(`[EMAIL] SMTP not configured. Would send to ${to}`);
+    console.log(`[EMAIL] From: ${from}`);
+    console.log(`[EMAIL] Subject: ${subject}`);
+    console.log(`[EMAIL] HTML length: ${html.length} bytes`);
+    return true;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.port === 465,
+    auth: { user: cfg.user, pass: cfg.pass }
+  });
+
+  await transporter.sendMail({ from, to, subject, html });
+  return true;
+}
 
 /**
  * Generate HTML email template for event pass
@@ -184,17 +225,19 @@ export async function sendEventPassEmail(passId: string, recipientEmail: string)
       passUrl
     });
 
-    // TODO: Integrate with your email service (SendGrid, Resend, Nodemailer, etc.)
-    // For now, we'll just log and mark as sent
-    console.log(`[EMAIL] Would send to ${recipientEmail}`);
-    console.log(`[EMAIL] Subject: Your Event Pass - ${pass.event.eventName}`);
-    console.log(`[EMAIL] HTML length: ${emailHTML.length} bytes`);
+    const ok = await sendEmail({
+      to: recipientEmail,
+      subject: `Your Event Pass - ${pass.event.eventName}`,
+      html: emailHTML
+    });
     
     // Mark email as sent in database
-    await EventPass.findByIdAndUpdate(passId, {
-      emailSent: true,
-      emailSentAt: new Date()
-    });
+    if (ok) {
+      await EventPass.findByIdAndUpdate(passId, {
+        emailSent: true,
+        emailSentAt: new Date()
+      });
+    }
 
     // In production, integrate with your email service:
     // Example with SendGrid:

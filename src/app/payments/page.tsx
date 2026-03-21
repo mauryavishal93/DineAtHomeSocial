@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
+import jsPDF from "jspdf";
 
 type PaymentItem = {
   paymentId: string;
@@ -76,8 +77,58 @@ export default function PaymentsPage() {
   };
 
   const downloadInvoice = async (paymentId: string) => {
-    // TODO: Implement invoice download
-    alert("Invoice download feature coming soon!");
+    const p = payments.find(x => x.paymentId === paymentId);
+    if (!p) return;
+
+    const doc = new jsPDF();
+    const left = 14;
+    let y = 18;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("Invoice", left, y);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("DineAtHome Social", left, (y += 8));
+    doc.text(`Invoice ID: INV-${p.paymentId.slice(-8).toUpperCase()}`, left, (y += 6));
+    doc.text(`Payment ID: ${p.paymentId}`, left, (y += 6));
+    doc.text(`Booking ID: ${p.bookingId}`, left, (y += 6));
+    doc.text(`Status: ${p.status}`, left, (y += 6));
+    doc.text(`Paid at: ${formatDate(p.paidAt)}`, left, (y += 6));
+    if (p.refundedAt) doc.text(`Refunded at: ${formatDate(p.refundedAt)}`, left, (y += 6));
+
+    y += 6;
+    doc.setDrawColor(220);
+    doc.line(left, y, 196, y);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("Event", left, (y += 10));
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Name: ${p.eventName}`, left, (y += 7));
+    doc.text(`Date: ${formatDate(p.eventDate)}`, left, (y += 6));
+    doc.text(`Payment method: ${p.paymentMethod}`, left, (y += 6));
+
+    y += 6;
+    doc.setDrawColor(220);
+    doc.line(left, y, 196, y);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("Amount", left, (y += 10));
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Total paid: ${formatCurrency(p.amount)}`, left, (y += 7));
+    if (p.refundAmount) doc.text(`Refund amount: ${formatCurrency(p.refundAmount)}`, left, (y += 6));
+
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text("This is a system generated invoice.", left, 285);
+
+    doc.save(`invoice-${p.paymentId.slice(-8)}.pdf`);
   };
 
   if (loading) {

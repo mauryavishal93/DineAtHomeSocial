@@ -40,14 +40,22 @@ export async function signRefreshToken(userId: string) {
 }
 
 export async function verifyAccessToken(token: string) {
-  const res = await jwtVerify(token, enc(env.JWT_ACCESS_SECRET));
-  const userId = res.payload.sub;
-  const role = (res.payload as { role?: Role }).role;
-  const adminRole = (res.payload as { adminRole?: string }).adminRole;
-  const username = (res.payload as { username?: string }).username;
-  if (!userId || typeof userId !== "string" || !role) throw new Error("Invalid token");
-  const typedAdminRole: AdminRole | undefined = adminRole as AdminRole | undefined;
-  return { userId, role, adminRole: typedAdminRole, username };
+  try {
+    const res = await jwtVerify(token, enc(env.JWT_ACCESS_SECRET));
+    const userId = res.payload.sub;
+    const role = (res.payload as { role?: Role }).role;
+    const adminRole = (res.payload as { adminRole?: string }).adminRole;
+    const username = (res.payload as { username?: string }).username;
+    if (!userId || typeof userId !== "string" || !role) throw new Error("Invalid token");
+    const typedAdminRole: AdminRole | undefined = adminRole as AdminRole | undefined;
+    return { userId, role, adminRole: typedAdminRole, username };
+  } catch (err: any) {
+    // Normalize JWT expiration errors so callers can treat them as auth issues
+    if (err?.name === "JWTExpired" || err?.code === "ERR_JWT_EXPIRED" || /exp.*claim/i.test(String(err?.message))) {
+      throw new Error("Token expired");
+    }
+    throw err;
+  }
 }
 
 export async function verifyRefreshToken(token: string) {

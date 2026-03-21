@@ -556,27 +556,41 @@ function EventCard({
                     </p>
                   )}
                 </div>
-                {isPast && onRateGuest && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0 rounded-xl"
-                    onClick={() =>
-                      onRateGuest(
-                        event.id,
-                        guest.bookingId,
-                        guest.guestUserId || `booking:${guest.bookingId}:${guest.guestIndex}`,
-                        guest.guestName,
-                        guest.guestAge,
-                        guest.guestGender,
-                        guest.isAdditionalGuest ?? false,
-                        guest.guestIndex
-                      )
-                    }
-                  >
-                    Rate
-                  </Button>
-                )}
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  {isUpcoming &&
+                    !guest.isAdditionalGuest &&
+                    guest.bookingStatus !== "CANCELLED" &&
+                    guest.guestUserId && (
+                      <Button size="sm" variant="outline" asChild className="rounded-xl">
+                        <Link
+                          href={`/messages?eventId=${event.id}&bookingId=${guest.bookingId}`}
+                        >
+                          Message
+                        </Link>
+                      </Button>
+                    )}
+                  {isPast && onRateGuest && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() =>
+                        onRateGuest(
+                          event.id,
+                          guest.bookingId,
+                          guest.guestUserId || `booking:${guest.bookingId}:${guest.guestIndex}`,
+                          guest.guestName,
+                          guest.guestAge,
+                          guest.guestGender,
+                          guest.isAdditionalGuest ?? false,
+                          guest.guestIndex
+                        )
+                      }
+                    >
+                      Rate
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

@@ -18,7 +18,9 @@ const NotificationSchema = new Schema(
         "HOST_RATED",
         "EVENT_FULL",
         "SEAT_AVAILABLE",
-        "EVENT_CANCELLED"
+        "EVENT_CANCELLED",
+        "REFUND_REQUESTED",
+        "SUPPORT_TICKET_CREATED"
       ]
     },
     title: { type: String, required: true },

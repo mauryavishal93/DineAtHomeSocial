@@ -9,7 +9,9 @@
 .leaflet-container {
   height: 100%;
   width: 100%;
+  min-height: 100%;
   z-index: 0;
+  background: #f4f4f5; /* visible while tiles load (CARTO light gray) */
 }
 
 .leaflet-container .leaflet-control-container {

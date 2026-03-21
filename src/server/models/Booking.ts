@@ -66,9 +66,13 @@ const BookingSchema = new Schema(
   cancelledAt: { type: Date, default: null },
   cancellationReason: { type: String, default: "" },
   
-  // Check-in fields
-  checkedInAt: { type: Date, default: null },
-  checkedInBy: { type: Types.ObjectId, ref: "User", default: null }
+    // Check-in fields
+    checkedInAt: { type: Date, default: null },
+    checkedInBy: { type: Types.ObjectId, ref: "User", default: null },
+
+    // E2E chat: ECDH public keys only (private keys stay in browsers)
+    chatGuestEcdhPublicJwk: { type: Schema.Types.Mixed, default: null },
+    chatHostEcdhPublicJwk: { type: Schema.Types.Mixed, default: null }
   },
   { timestamps: true }
 );

@@ -3,10 +3,13 @@ import { EventSlot } from "@/server/models/EventSlot";
 import { Booking } from "@/server/models/Booking";
 import { Payment } from "@/server/models/Payment";
 import { GuestProfile } from "@/server/models/GuestProfile";
-import { Notification } from "@/server/models/Notification";
 import { User } from "@/server/models/User";
-import { createEventPasses } from "./eventPassService";
-import { sendEventPassesForBooking } from "./emailService";
+import {
+  createRazorpayOrder,
+  getRazorpayKeyIdPublic,
+  isRazorpayConfigured
+} from "@/server/payments/razorpay";
+import { finalizeBookingAfterPayment } from "./bookingPaymentSideEffects";
 
 export async function createBooking(input: {
   guestUserId: string;
@@ -145,7 +148,7 @@ export async function createBooking(input: {
       additionalGuests: input.additionalGuests || []
     });
     
-    // Create payment
+    // Create payment record
     const payment = await Payment.create({
       bookingId: booking._id,
       provider: "RAZORPAY",
@@ -153,64 +156,59 @@ export async function createBooking(input: {
       currency: "INR",
       status: "PENDING"
     });
-    
-    // Create event passes (best effort)
-    try {
-      await createEventPasses(String(booking._id));
-      
-      // Send email with passes (best effort)
-      try {
-        const guestUser = await User.findById(input.guestUserId).select("email").lean();
-        if (guestUser) {
-          await sendEventPassesForBooking(String(booking._id), (guestUser as any).email);
-        }
-      } catch (emailError) {
-        console.error("Failed to send event pass emails:", emailError);
-      }
-    } catch (passError) {
-      // Pass creation failure shouldn't break booking
-      console.error("Failed to create event passes:", passError);
-    }
-    
-    // Create notification (best effort)
-    try {
-      // Check for recent duplicate notification
-      const recentNotification = await Notification.findOne({
-        userId: updatedSlotDoc.hostUserId,
-        type: "BOOKING_CONFIRMED",
-        "metadata.eventId": input.eventSlotId,
-        "metadata.bookingId": String(booking._id),
-        createdAt: { $gte: new Date(Date.now() - 60000) } // Last minute
-      });
 
-      if (!recentNotification) {
-        await Notification.create({
-          userId: updatedSlotDoc.hostUserId,
-          title: "New Booking Received",
-          message: `${input.guestName} booked ${input.seats} seat${input.seats > 1 ? 's' : ''} for your event "${updatedSlotDoc.eventName}"`,
-          type: "BOOKING_CONFIRMED",
-          relatedEventId: input.eventSlotId,
-          relatedBookingId: booking._id,
-          metadata: {
-            bookingId: String(booking._id),
-            eventId: input.eventSlotId,
-            guestName: input.guestName,
-            seats: input.seats
-          },
-          isRead: false
-        });
-      }
-    } catch (notifError) {
-      // Notification failure shouldn't break booking
-      console.error("Failed to create notification:", notifError);
+    await Booking.updateOne({ _id: booking._id }, { $set: { paymentId: payment._id } });
+
+    // Free events: confirm immediately
+    if (amountTotal <= 0) {
+      await Payment.updateOne(
+        { _id: payment._id },
+        { $set: { status: "PAID", paidAt: new Date() } }
+      );
+      await Booking.updateOne({ _id: booking._id }, { $set: { status: "CONFIRMED" } });
+      await finalizeBookingAfterPayment(String(booking._id));
+      return {
+        bookingId: String(booking._id),
+        paymentId: String(payment._id),
+        amountTotal,
+        currency: "INR",
+        status: "CONFIRMED",
+        requiresPayment: false,
+        razorpayOrderId: null,
+        razorpayKeyId: null
+      };
     }
-    
+
+    if (!isRazorpayConfigured()) {
+      throw new Error(
+        "Online payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env.local."
+      );
+    }
+
+    const receipt = `bk${String(booking._id).replace(/[^a-zA-Z0-9]/g, "").slice(-20)}`.slice(0, 40);
+    const order = await createRazorpayOrder({
+      amountPaise: amountTotal,
+      receipt,
+      notes: {
+        bookingId: String(booking._id),
+        eventSlotId: String(input.eventSlotId)
+      }
+    });
+
+    await Payment.updateOne(
+      { _id: payment._id },
+      { $set: { razorpayOrderId: order.id } }
+    );
+
     return {
       bookingId: String(booking._id),
       paymentId: String(payment._id),
       amountTotal,
       currency: "INR",
-      status: "PAYMENT_PENDING"
+      status: "PAYMENT_PENDING",
+      requiresPayment: true,
+      razorpayOrderId: order.id,
+      razorpayKeyId: getRazorpayKeyIdPublic()
     };
   } catch (error) {
     // Rollback event seats if booking creation fails

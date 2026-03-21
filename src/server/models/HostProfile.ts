@@ -37,7 +37,8 @@ const HostProfileSchema = new Schema(
     cancellationRate: { type: Number, default: 0 },
     
     // Referrals
-    referralCode: { type: String, default: "", unique: true, sparse: true },
+    // Omit until generated; empty string breaks sparse unique index (duplicate "").
+    referralCode: { type: String, unique: true, sparse: true },
     totalHostsReferred: { type: Number, default: 0 },
     
     // Communities

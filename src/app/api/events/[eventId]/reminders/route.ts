@@ -4,7 +4,9 @@ import { connectMongo } from "@/server/db/mongoose";
 import { EventSlot } from "@/server/models/EventSlot";
 import { Booking } from "@/server/models/Booking";
 import { Notification } from "@/server/models/Notification";
+import { User } from "@/server/models/User";
 import { createResponse } from "@/server/http/response";
+import { sendEmail } from "@/server/services/emailService";
 
 // Send reminder for an event
 export async function POST(
@@ -73,9 +75,44 @@ export async function POST(
 
     await Notification.insertMany(notifications);
 
-    // TODO: Send email/SMS reminders
-    // await sendEmailReminders(bookings, eventDoc, reminderMessage);
-    // await sendSMSReminders(bookings, eventDoc, reminderMessage);
+    // Send email reminders (best-effort; do not fail the API if sending fails)
+    try {
+      const guestIds = bookings.map((b: any) => String(b.guestUserId));
+      const users = await User.find({ _id: { $in: guestIds } }).select({ _id: 1, email: 1 }).lean();
+      const emailById = new Map<string, string>();
+      for (const u of users as any[]) {
+        emailById.set(String(u._id), String(u.email));
+      }
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      const when = `${eventStart.toLocaleDateString()} at ${eventStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      const html = (guestEmail: string) => `
+        <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height: 1.5;">
+          <h2 style="margin:0 0 8px;">Event reminder</h2>
+          <p style="margin:0 0 12px;">${reminderMessage}</p>
+          <p style="margin:0 0 12px;"><strong>When:</strong> ${when}</p>
+          <p style="margin:0 0 12px;"><strong>Event:</strong> ${eventDoc.eventName}</p>
+          <p style="margin:0 0 16px;">
+            <a href="${appUrl}/events/${eventId}" style="color:#7c3aed;">View event details</a>
+          </p>
+          <p style="margin:0; color:#6b7280; font-size:12px;">You received this because you have a booking for this event.</p>
+        </div>
+      `.trim();
+
+      await Promise.all(
+        bookings.map(async (booking: any) => {
+          const guestEmail = emailById.get(String(booking.guestUserId));
+          if (!guestEmail) return;
+          await sendEmail({
+            to: guestEmail,
+            subject: `Reminder: ${eventDoc.eventName}`,
+            html: html(guestEmail)
+          });
+        })
+      );
+    } catch (e) {
+      console.error("[Reminders] Email reminder send failed:", e);
+    }
 
     return createResponse({
       success: true,

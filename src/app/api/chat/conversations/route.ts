@@ -5,81 +5,102 @@ import { ChatMessage } from "@/server/models/ChatMessage";
 import { EventSlot } from "@/server/models/EventSlot";
 import { Booking } from "@/server/models/Booking";
 import { User } from "@/server/models/User";
-import { Venue } from "@/server/models/Venue";
+import { HostProfile } from "@/server/models/HostProfile";
+import { GuestProfile } from "@/server/models/GuestProfile";
 import { createResponse } from "@/server/http/response";
+import { buildChatThreadFilter } from "@/server/services/chatThread";
 
-// Get all conversations for the current user
+const BOOKING_OK = ["CONFIRMED", "PAYMENT_PENDING"] as const;
+
+async function displayNameForUser(userId: string, roleHint?: string): Promise<string> {
+  const user = await User.findById(userId).lean();
+  const u = user as any;
+  if (!u) return "User";
+
+  if (roleHint === "HOST" || u.role === "HOST") {
+    const hp = await HostProfile.findOne({ userId }).lean();
+    if (hp) {
+      const n = `${(hp as any).firstName || ""} ${(hp as any).lastName || ""}`.trim();
+      if (n) return n;
+    }
+    return u.name || "Host";
+  }
+
+  const gp = await GuestProfile.findOne({ userId }).lean();
+  if (gp) {
+    const n = `${(gp as any).firstName || ""} ${(gp as any).lastName || ""}`.trim();
+    if (n) return n;
+  }
+  return u.name || "Guest";
+}
+
+// One row per booking (host ↔ guest thread)
 export async function GET(req: NextRequest) {
   try {
     const ctx = await requireAuth(req);
     await connectMongo();
 
-    // Get all events where user has messages (as host or guest)
-    const messages = await ChatMessage.find({
-      $or: [
-        { senderUserId: ctx.userId },
-        { eventSlotId: { $exists: true } }
-      ]
+    const bookings = await Booking.find({
+      $or: [{ guestUserId: ctx.userId }, { hostUserId: ctx.userId }],
+      status: { $in: [...BOOKING_OK] }
     })
-      .select("eventSlotId")
-      .distinct("eventSlotId")
+      .sort({ updatedAt: -1 })
+      .limit(80)
       .lean();
 
-    const conversations = await Promise.all(
-      messages.map(async (eventSlotId: any) => {
-        const event = await EventSlot.findById(eventSlotId)
+    const rows = await Promise.all(
+      bookings.map(async (b: any) => {
+        const event = await EventSlot.findById(b.eventSlotId)
           .populate({ path: "venueId", select: "name address" })
-          .populate({ path: "hostUserId", select: "name" })
           .lean();
 
         if (!event) return null;
 
         const eventDoc = event as any;
-        const isHost = String(eventDoc.hostUserId?._id || eventDoc.hostUserId) === String(ctx.userId);
-        
-        // Check if event has ended
+        const isHost = String(b.hostUserId) === String(ctx.userId);
+        const hostUserId = String(b.hostUserId);
+        const guestUserId = String(b.guestUserId);
+        const bookingId = String(b._id);
+        const eventSlotId = String(b.eventSlotId);
+
         const eventEndTime = eventDoc.endAt ? new Date(eventDoc.endAt) : null;
-        const isEventEnded = eventEndTime && eventEndTime < new Date();
+        const isEventEnded = !!(eventEndTime && eventEndTime < new Date());
 
-        // Get latest message
-        const latestMessage = await ChatMessage.findOne({
-          eventSlotId
-        })
-          .sort({ createdAt: -1 })
-          .lean();
-
-        // Get unread count
-        const unreadCount = await ChatMessage.countDocuments({
+        const threadFilter = buildChatThreadFilter({
           eventSlotId,
+          bookingId,
+          hostUserId,
+          guestUserId
+        });
+
+        const latestMessage = await ChatMessage.findOne(threadFilter).sort({ createdAt: -1 }).lean();
+
+        const unreadCount = await ChatMessage.countDocuments({
+          ...threadFilter,
           senderUserId: { $ne: ctx.userId },
           readBy: { $ne: ctx.userId }
         });
 
-        // Get other party info
         let otherPartyName = "";
         let otherPartyId = "";
-
         if (isHost) {
-          // Get first guest booking
-          const booking = await Booking.findOne({
-            eventSlotId,
-            status: { $in: ["CONFIRMED", "PAYMENT_PENDING", "COMPLETED"] }
-          })
-            .populate({ path: "guestUserId", select: "name" })
-            .lean();
-          
-          if (booking) {
-            const bookingDoc = booking as any;
-            otherPartyName = bookingDoc.guestUserId?.name || bookingDoc.guestName || "Guest";
-            otherPartyId = String(bookingDoc.guestUserId?._id || bookingDoc.guestUserId);
-          }
+          otherPartyId = guestUserId;
+          otherPartyName = b.guestName || (await displayNameForUser(guestUserId, "GUEST"));
         } else {
-          otherPartyName = eventDoc.hostUserId?.name || "Host";
-          otherPartyId = String(eventDoc.hostUserId?._id || eventDoc.hostUserId);
+          otherPartyId = hostUserId;
+          otherPartyName = await displayNameForUser(hostUserId, "HOST");
         }
 
+        const lm = latestMessage as any;
+        const preview = lm?.message
+          ? String(lm.message).startsWith("ENC1:")
+            ? "🔒 Encrypted message"
+            : lm.message
+          : "";
+
         return {
-          eventSlotId: String(eventSlotId),
+          bookingId,
+          eventSlotId,
           eventName: eventDoc.eventName || "Event",
           eventDate: eventDoc.startAt,
           venueName: eventDoc.venueId?.name || "",
@@ -87,11 +108,13 @@ export async function GET(req: NextRequest) {
           otherPartyName,
           otherPartyId,
           otherPartyRole: isHost ? "GUEST" : "HOST",
-          latestMessage: latestMessage ? {
-            message: (latestMessage as any).message,
-            senderName: (latestMessage as any).senderName,
-            createdAt: (latestMessage as any).createdAt
-          } : null,
+          latestMessage: lm
+            ? {
+                message: preview,
+                senderName: lm.senderName || "",
+                createdAt: lm.createdAt
+              }
+            : null,
           unreadCount,
           isHost,
           isEventEnded
@@ -99,8 +122,7 @@ export async function GET(req: NextRequest) {
       })
     );
 
-    // Filter out nulls and sort by latest message
-    const validConversations = conversations
+    const validConversations = rows
       .filter(Boolean)
       .sort((a: any, b: any) => {
         if (!a.latestMessage) return 1;

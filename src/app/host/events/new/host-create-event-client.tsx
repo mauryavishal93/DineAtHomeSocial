@@ -140,6 +140,62 @@ export default function HostCreateEventClient() {
         };
         setUploadingMedia(true);
 
+        // Persist venue pin on profile so guests see the map (geo on Venue)
+        if (
+          venueLatitude !== null &&
+          venueLongitude !== null &&
+          typeof venueLatitude === "number" &&
+          typeof venueLongitude === "number"
+        ) {
+          const prof = await apiFetch<{
+            firstName?: string;
+            lastName?: string;
+            age?: number;
+            bio?: string;
+            interests?: string[];
+            venueName?: string;
+            venueAddress?: string;
+            locality?: string;
+            city?: string;
+            state?: string;
+            country?: string;
+            postalCode?: string;
+            cuisines?: string[];
+            activities?: string[];
+          }>("/api/host/profile", {
+            method: "GET",
+            headers: { authorization: `Bearer ${token}` }
+          });
+          if (prof.ok && prof.data) {
+            const d = prof.data;
+            await apiFetch("/api/host/profile", {
+              method: "PUT",
+              headers: {
+                authorization: `Bearer ${token}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                firstName: d.firstName || "Host",
+                lastName: d.lastName || "",
+                age: typeof d.age === "number" ? d.age : 25,
+                bio: d.bio || "",
+                interests: Array.isArray(d.interests) ? d.interests : [],
+                venueName: d.venueName || "My venue",
+                venueAddress: venueAddress.trim() || d.venueAddress || "",
+                locality: d.locality || "",
+                city: d.city || "",
+                state: d.state || "",
+                country: d.country || "",
+                postalCode: d.postalCode || "",
+                cuisines: Array.isArray(d.cuisines) ? d.cuisines : [],
+                activities: Array.isArray(d.activities) ? d.activities : [],
+                latitude: venueLatitude,
+                longitude: venueLongitude
+              })
+            });
+          }
+        }
+
         // Step 1: Create event
         const res = await apiFetch<{ eventSlotId: string }>("/api/host/events", {
           method: "POST",
@@ -286,12 +342,16 @@ export default function HostCreateEventClient() {
             </div>
 
             {venueAddress ? (
-              <div className="rounded-2xl border border-sand-200 bg-white/60 overflow-hidden">
+              <div className="space-y-2 rounded-2xl border border-sand-200 bg-white/60 overflow-hidden">
+                <p className="px-4 pt-4 text-xs text-ink-600">
+                  Drag the map or use <strong>Get Location</strong> so guests see the correct pin. Your profile venue
+                  coordinates update when you publish (if you set a pin).
+                </p>
                 <AddressMap
                   address={venueAddress}
                   latitude={venueLatitude}
                   longitude={venueLongitude}
-                  editable={false}
+                  editable
                   onLocationSelect={handleLocationSelect}
                 />
               </div>

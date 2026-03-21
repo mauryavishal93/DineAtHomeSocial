@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import dynamic from "next/dynamic";
 
 import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,15 @@ import { Button } from "@/components/ui/button";
 
 import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
+
+const AddressMap = dynamic(() => import("@/components/map/address-map").then((m) => m.AddressMap), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-64 rounded-lg border border-sand-200 bg-sand-100 flex items-center justify-center text-sm text-ink-600">
+      Loading map…
+    </div>
+  )
+});
 
 const guestSchema = z.object({
   name: z.string().min(1).max(80),
@@ -286,45 +296,6 @@ export default function ProfilePage() {
       setLoading(false);
     })();
   }, [guestForm, hostForm, role, router, token, mounted]);
-
-  // Auto-fill address components when venue address changes
-  useEffect(() => {
-    if (!mounted || !isEditing || role !== "HOST") return;
-    
-    const address = hostForm.watch("venueAddress");
-    if (!address || address.trim().length < 10) return;
-
-    // Debounce auto-fill
-    const timeoutId = setTimeout(async () => {
-      setIsAutoFilling(true);
-      try {
-        const res = await apiFetch<{
-          locality?: string;
-          city?: string;
-          state?: string;
-          country?: string;
-          postalCode?: string;
-        }>(`/api/geocode?address=${encodeURIComponent(address.trim())}`);
-        
-        if (res.ok && res.data) {
-          // Only auto-fill if fields are empty (don't overwrite user input)
-          if (res.data.locality && !locality) setLocality(res.data.locality);
-          if (res.data.city && !city) setCity(res.data.city);
-          if (res.data.state && !state) setState(res.data.state);
-          if (res.data.country && !country) setCountry(res.data.country);
-          if (res.data.postalCode && !postalCode) setPostalCode(res.data.postalCode);
-        }
-      } catch (error) {
-        // Silently fail - user can fill manually
-        console.error("Auto-fill failed:", error);
-      } finally {
-        setIsAutoFilling(false);
-      }
-    }, 2000); // Wait 2 seconds after user stops typing
-
-    return () => clearTimeout(timeoutId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostForm.watch("venueAddress"), mounted, isEditing, role]);
 
   // Auto-fill locality, city, and state when postal code changes
   useEffect(() => {
@@ -692,6 +663,47 @@ export default function ProfilePage() {
                   value={postalCode}
                   onChange={(e) => setPostalCode(e.target.value)}
                 />
+
+                <div className="rounded-2xl border border-sand-200 bg-white/50 p-4">
+                  <div className="text-sm font-medium text-ink-900 mb-1">Venue location on map</div>
+                  <p className="text-xs text-ink-600 mb-3">
+                    Edit the address field above; the map will <strong>automatically</strong> look up latitude and
+                    longitude after you pause typing. You can also use <strong>Get Location</strong> or click the map
+                    to adjust the pin.
+                  </p>
+                  {(hostForm.watch("venueAddress") || "").trim().length >= 5 ? (
+                    <AddressMap
+                      address={(hostForm.watch("venueAddress") || "").trim()}
+                      latitude={latitude}
+                      longitude={longitude}
+                      editable
+                      onLocationSelect={(addr, lat, lng, components) => {
+                        setLatitude(lat);
+                        setLongitude(lng);
+                        if (addr?.trim()) {
+                          hostForm.setValue("venueAddress", addr.trim(), { shouldDirty: true });
+                        }
+                        if (components) {
+                          setLocality((prev) => (prev?.trim() ? prev : components.locality?.trim() || prev));
+                          setCity((prev) => (prev?.trim() ? prev : components.city?.trim() || prev));
+                          setState((prev) => (prev?.trim() ? prev : components.state?.trim() || prev));
+                          setCountry((prev) => (prev?.trim() ? prev : components.country?.trim() || prev));
+                          setPostalCode((prev) => (prev?.trim() ? prev : components.postalCode?.trim() || prev));
+                        }
+                      }}
+                    />
+                  ) : (
+                    <p className="text-sm text-ink-600">Enter at least a few characters of your venue address to load the map.</p>
+                  )}
+                  {(latitude !== null || longitude !== null) && (
+                    <p className="mt-2 text-xs text-ink-500">
+                      Saved coordinates:{" "}
+                      {latitude != null && longitude != null
+                        ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
+                        : "—"}
+                    </p>
+                  )}
+                </div>
 
                 <Input
                   label="Cuisine served"

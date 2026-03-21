@@ -6,6 +6,7 @@ import { Booking } from "@/server/models/Booking";
 import { EventSlot } from "@/server/models/EventSlot";
 import { Payment } from "@/server/models/Payment";
 import { GuestProfile } from "@/server/models/GuestProfile";
+import { createRazorpayOrder, getRazorpayKeyIdPublic, isRazorpayConfigured } from "@/server/payments/razorpay";
 
 export const runtime = "nodejs";
 
@@ -56,7 +57,8 @@ export async function POST(
     const json = await req.json().catch(() => null);
     const parsed = schema.safeParse(json);
     if (!parsed.success) return badRequest(parsed.error.message);
-    
+    const body = parsed.data;
+
     // Get existing booking
     const booking = await Booking.findById(bookingId);
     if (!booking) {
@@ -84,7 +86,7 @@ export async function POST(
     const eventDoc = event as any;
     
     // Check max seats per user (2 total)
-    const totalSeatsAfter = bookingDoc.seats + parsed.data.seats;
+    const totalSeatsAfter = bookingDoc.seats + body.seats;
     if (totalSeatsAfter > 2) {
       return badRequest("Maximum 2 seats per booking (including existing)");
     }
@@ -99,26 +101,33 @@ export async function POST(
       return badRequest("Price cannot be negative");
     }
     
-    const additionalAmount = pricePerSeat * parsed.data.seats;
+    const additionalAmount = pricePerSeat * body.seats;
+    const guestMobilesNorm = body.additionalGuests.map((g) => g.mobile.toLowerCase().trim());
+    const normalizedGuests = body.additionalGuests.map((g) => ({
+      name: g.name,
+      mobile: g.mobile.toLowerCase().trim(),
+      age: g.age,
+      gender: g.gender
+    }));
 
     // Check if enough seats available
-    if (eventDoc.seatsRemaining < parsed.data.seats) {
+    if (eventDoc.seatsRemaining < body.seats) {
       return badRequest("Not enough seats available");
     }
 
     // Calculate new seats remaining
-    const newSeatsRemaining = eventDoc.seatsRemaining - parsed.data.seats;
+    const newSeatsRemaining = eventDoc.seatsRemaining - body.seats;
     const newStatus = newSeatsRemaining <= 0 ? "FULL" : "OPEN";
 
     // Atomic check and update event seats
     const updatedEvent = await EventSlot.findOneAndUpdate(
       {
         _id: bookingDoc.eventSlotId,
-        seatsRemaining: { $gte: parsed.data.seats },
+        seatsRemaining: { $gte: body.seats },
         status: "OPEN"
       },
       {
-        $inc: { seatsRemaining: -parsed.data.seats },
+        $inc: { seatsRemaining: -body.seats },
         $set: { status: newStatus }
       },
       { 
@@ -136,11 +145,11 @@ export async function POST(
         bookingId,
         {
           $inc: { 
-            seats: parsed.data.seats,
+            seats: body.seats,
             amountTotal: additionalAmount
           },
           $push: {
-            additionalGuests: { $each: parsed.data.additionalGuests }
+            additionalGuests: { $each: normalizedGuests }
           }
         },
         { new: true }
@@ -151,26 +160,95 @@ export async function POST(
         await EventSlot.findByIdAndUpdate(
           bookingDoc.eventSlotId,
           {
-            $inc: { seatsRemaining: parsed.data.seats },
+            $inc: { seatsRemaining: body.seats },
             $set: { status: eventDoc.seatsRemaining > 0 ? "OPEN" : eventDoc.status }
           }
         );
         return badRequest("Failed to update booking");
       }
-      
-      // Update payment
-      if (bookingDoc.paymentId) {
-        await Payment.updateOne(
-          { _id: bookingDoc.paymentId },
-          { $inc: { amount: additionalAmount } }
+
+      async function rollbackAddedSeats() {
+        await EventSlot.findByIdAndUpdate(
+          bookingDoc.eventSlotId,
+          {
+            $inc: { seatsRemaining: body.seats },
+            $set: { status: eventDoc.seatsRemaining > 0 ? "OPEN" : eventDoc.status }
+          }
         );
+        await Booking.findByIdAndUpdate(bookingId, {
+            $inc: { seats: -body.seats, amountTotal: -additionalAmount },
+          $pull: { additionalGuests: { mobile: { $in: guestMobilesNorm } } }
+        });
       }
-      
+
+      let requiresPayment = false;
+      let razorpayOrderId: string | null = null;
+      let payIdOut: string | null = null;
+      let razorpayKeyId: string | null = null;
+
+      if (additionalAmount > 0) {
+        if (!isRazorpayConfigured()) {
+          await rollbackAddedSeats();
+          return serverError(
+            "Online payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env.local."
+          );
+        }
+
+        const ub = updatedBooking as any;
+
+        try {
+          if (ub.status === "PAYMENT_PENDING" && bookingDoc.paymentId) {
+            const order = await createRazorpayOrder({
+              amountPaise: ub.amountTotal,
+              receipt: `bk${String(bookingId).replace(/[^a-zA-Z0-9]/g, "").slice(-16)}`.slice(0, 40),
+              notes: { bookingId: String(bookingId), type: "booking_update" }
+            });
+            await Payment.updateOne(
+              { _id: bookingDoc.paymentId },
+              { $set: { amount: ub.amountTotal, razorpayOrderId: order.id } }
+            );
+            razorpayOrderId = order.id;
+            payIdOut = String(bookingDoc.paymentId);
+            razorpayKeyId = getRazorpayKeyIdPublic();
+            requiresPayment = true;
+          } else if (ub.status === "CONFIRMED") {
+            const p2 = await Payment.create({
+              bookingId: ub._id,
+              provider: "RAZORPAY",
+              amount: additionalAmount,
+              currency: "INR",
+              status: "PENDING",
+              addonSeats: body.seats,
+              addonGuestMobiles: guestMobilesNorm
+            } as any);
+            const order = await createRazorpayOrder({
+              amountPaise: additionalAmount,
+              receipt: `ad${String(bookingId).replace(/[^a-zA-Z0-9]/g, "").slice(-16)}`.slice(0, 40),
+              notes: { bookingId: String(bookingId), type: "addon" }
+            });
+            await Payment.updateOne({ _id: (p2 as any)._id }, { $set: { razorpayOrderId: order.id } });
+            razorpayOrderId = order.id;
+            payIdOut = String((p2 as any)._id);
+            razorpayKeyId = getRazorpayKeyIdPublic();
+            requiresPayment = true;
+          }
+        } catch (rzErr) {
+          console.error("Razorpay order (add-guests):", rzErr);
+          await rollbackAddedSeats();
+          return serverError("Could not start payment. Please try again.");
+        }
+      }
+
       return ok({
         bookingId: String(updatedBooking._id),
         seats: updatedBooking.seats,
         amountTotal: updatedBooking.amountTotal,
-        additionalAmount
+        additionalAmount,
+        status: String((updatedBooking as any).status || ""),
+        requiresPayment,
+        razorpayOrderId,
+        paymentId: payIdOut,
+        razorpayKeyId
       });
     } catch (error) {
       // Rollback event seats if booking update failed
@@ -178,7 +256,7 @@ export async function POST(
         await EventSlot.findByIdAndUpdate(
           bookingDoc.eventSlotId,
           {
-            $inc: { seatsRemaining: parsed.data.seats },
+            $inc: { seatsRemaining: body.seats },
             $set: { status: eventDoc.seatsRemaining > 0 ? "OPEN" : eventDoc.status }
           }
         );

@@ -4,7 +4,10 @@ import { connectMongo } from "@/server/db/mongoose";
 import { Booking } from "@/server/models/Booking";
 import { Payment } from "@/server/models/Payment";
 import { EventSlot } from "@/server/models/EventSlot";
+import { Notification } from "@/server/models/Notification";
+import { User } from "@/server/models/User";
 import { createResponse } from "@/server/http/response";
+import { sendEmail } from "@/server/services/emailService";
 
 // Request refund
 export async function POST(
@@ -62,14 +65,46 @@ export async function POST(
       }
     );
 
-    // TODO: Notify host about refund request
-    // await Notification.create({
-    //   userId: bookingDoc.hostUserId,
-    //   type: "REFUND_REQUESTED",
-    //   title: "Refund Request",
-    //   message: `Guest has requested refund for booking ${bookingId}`,
-    //   relatedBookingId: bookingId
-    // });
+    // Notify host about refund request
+    await Notification.create({
+      userId: bookingDoc.hostUserId,
+      type: "REFUND_REQUESTED",
+      title: "Refund requested",
+      message: `A guest requested a refund for "${eventDoc.eventName}".`,
+      relatedBookingId: bookingId,
+      relatedEventId: bookingDoc.eventSlotId,
+      relatedUserId: bookingDoc.guestUserId,
+      metadata: {
+        bookingId: String(bookingId),
+        reason: reason || ""
+      }
+    });
+
+    // Best-effort email to host (does not fail request if email fails)
+    try {
+      const host = await User.findById(bookingDoc.hostUserId).select({ email: 1 }).lean();
+      const hostEmail = host ? String((host as any).email) : "";
+      if (hostEmail) {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+        await sendEmail({
+          to: hostEmail,
+          subject: `Refund requested: ${eventDoc.eventName}`,
+          html: `
+            <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height: 1.5;">
+              <h2 style="margin:0 0 8px;">Refund request received</h2>
+              <p style="margin:0 0 12px;">A guest requested a refund for <strong>${eventDoc.eventName}</strong>.</p>
+              ${reason ? `<p style="margin:0 0 12px;"><strong>Reason:</strong> ${String(reason)}</p>` : ""}
+              <p style="margin:0 0 12px;">
+                <a href="${appUrl}/bookings/${bookingId}" style="color:#7c3aed;">View booking</a>
+              </p>
+              <p style="margin:0; color:#6b7280; font-size:12px;">This is an automated email.</p>
+            </div>
+          `.trim()
+        });
+      }
+    } catch (e) {
+      console.error("[Refund] Failed to email host:", e);
+    }
 
     return createResponse({
       success: true,
