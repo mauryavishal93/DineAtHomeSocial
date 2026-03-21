@@ -336,26 +336,33 @@ export default function HostCreateEventClient() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-sand-200 bg-white/60 p-4 text-sm">
-              <div className="font-medium text-ink-900">Address</div>
-              <div className="mt-1 text-ink-700">{venueAddress || "Missing venue address (complete host setup)."}</div>
-            </div>
-
-            {venueAddress ? (
-              <div className="space-y-2 rounded-2xl border border-sand-200 bg-white/60 overflow-hidden">
-                <p className="px-4 pt-4 text-xs text-ink-600">
-                  Drag the map or use <strong>Get Location</strong> so guests see the correct pin. Your profile venue
-                  coordinates update when you publish (if you set a pin).
+            <div className="space-y-4 rounded-2xl border border-sand-200 bg-white/60 p-4 text-sm">
+              <div>
+                <div className="font-display text-lg font-semibold text-ink-900">Venue location</div>
+                <p className="mt-1 text-xs text-ink-600">
+                  Address comes from your host profile. Adjust the pin here so the event shows the right spot; profile
+                  coordinates update when you publish if you set a pin.
                 </p>
-                <AddressMap
-                  address={venueAddress}
-                  latitude={venueLatitude}
-                  longitude={venueLongitude}
-                  editable
-                  onLocationSelect={handleLocationSelect}
-                />
               </div>
-            ) : null}
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-ink-500">Address</div>
+                <div className="mt-1 text-ink-800">{venueAddress || "Missing venue address (complete host setup)."}</div>
+              </div>
+              {venueAddress ? (
+                <div className="overflow-hidden rounded-xl border border-sand-200">
+                  <p className="border-b border-sand-200 bg-sand-50/80 px-3 py-2 text-xs text-ink-600">
+                    Use <strong>Get Location</strong> or click the map to refine the pin before publishing.
+                  </p>
+                  <AddressMap
+                    address={venueAddress}
+                    latitude={venueLatitude}
+                    longitude={venueLongitude}
+                    editable
+                    onLocationSelect={handleLocationSelect}
+                  />
+                </div>
+              ) : null}
+            </div>
 
             {/* Image and Video Upload Section */}
             <div className="space-y-4 rounded-2xl border border-sand-200 bg-white/60 p-4">

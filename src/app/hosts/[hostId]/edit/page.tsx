@@ -8,6 +8,7 @@ import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/http";
 import { getAccessToken, getRole } from "@/lib/session";
+import { AddressAutocompleteInput } from "@/components/forms/address-autocomplete-input";
 
 // Dynamically import AddressMap to avoid SSR issues with Leaflet
 const AddressMap = dynamic(() => import("@/components/map/address-map").then((mod) => mod.AddressMap), {
@@ -272,20 +273,23 @@ export default function EditHostProfilePage() {
                   required
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-700 mb-1">Address</label>
-                <input
-                  type="text"
-                  value={formData.venueAddress}
-                  onChange={(e) => setFormData({ ...formData, venueAddress: e.target.value })}
-                  className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm"
-                  required
-                />
-                <p className="mt-1 text-xs text-ink-600">
-                  Latitude and longitude update automatically on the map after you pause typing, or use{" "}
-                  <strong>Get Location</strong> / click the map.
-                </p>
-              </div>
+              <AddressAutocompleteInput
+                label="Address"
+                appearance="sand"
+                value={formData.venueAddress}
+                onChange={(v) => setFormData({ ...formData, venueAddress: v })}
+                required
+                onPickSuggestion={(s) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    venueAddress: s.displayName,
+                    latitude: s.latitude.toString(),
+                    longitude: s.longitude.toString(),
+                    locality:
+                      prev.locality?.trim() ? prev.locality : s.locality?.trim() || prev.locality
+                  }));
+                }}
+              />
               <div>
                 <label className="block text-sm font-medium text-ink-700 mb-1">Locality</label>
                 <input
@@ -303,6 +307,65 @@ export default function EditHostProfilePage() {
                   className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm"
                   rows={3}
                 />
+              </div>
+
+              <div className="border-t border-sand-200 pt-6 mt-2 space-y-4">
+                <div>
+                  <h3 className="font-display text-lg font-semibold text-ink-900">Map &amp; coordinates</h3>
+                  <p className="mt-1 text-xs text-ink-600">
+                    Update the pin here or from the address field: pause typing to geocode, use{" "}
+                    <strong>Get Location</strong>, or click the map. Latitude and longitude stay in sync.
+                  </p>
+                </div>
+                {formData.venueAddress ? (
+                  <AddressMap
+                    address={formData.venueAddress}
+                    latitude={formData.latitude ? parseFloat(formData.latitude) : null}
+                    longitude={formData.longitude ? parseFloat(formData.longitude) : null}
+                    editable={true}
+                    autoForwardGeocodeOnAddressChange={false}
+                    onLocationSelect={(newAddress, lat, lng, components) => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        latitude: lat.toString(),
+                        longitude: lng.toString(),
+                        venueAddress: newAddress?.trim() || prev.venueAddress,
+                        locality:
+                          components?.locality?.trim() && !prev.locality?.trim()
+                            ? components.locality.trim()
+                            : prev.locality
+                      }));
+                    }}
+                  />
+                ) : (
+                  <p className="text-sm text-ink-600 rounded-xl border border-dashed border-sand-300 bg-sand-50/80 px-4 py-6 text-center">
+                    Enter a <strong>venue address</strong> above to load the map and set your pin.
+                  </p>
+                )}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium text-ink-700 mb-1">Latitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={formData.latitude}
+                      onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+                      className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm"
+                      placeholder="e.g., 28.6139"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-ink-700 mb-1">Longitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={formData.longitude}
+                      onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+                      className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm"
+                      placeholder="e.g., 77.2090"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -365,62 +428,6 @@ export default function EditHostProfilePage() {
                 <div className="text-sm text-ink-600">No activities added yet</div>
               )}
             </div>
-          </div>
-
-          {/* Map Location */}
-          <div className="rounded-3xl border border-sand-200 bg-white/60 p-6 shadow-soft backdrop-blur">
-            <h2 className="font-display text-xl text-ink-900 mb-4">Map Location</h2>
-            {formData.venueAddress ? (
-              <div className="mb-4">
-                <AddressMap
-                  address={formData.venueAddress}
-                  latitude={formData.latitude ? parseFloat(formData.latitude) : null}
-                  longitude={formData.longitude ? parseFloat(formData.longitude) : null}
-                  editable={true}
-                  onLocationSelect={(newAddress, lat, lng, components) => {
-                    setFormData((prev) => ({
-                      ...prev,
-                      latitude: lat.toString(),
-                      longitude: lng.toString(),
-                      venueAddress: newAddress?.trim() || prev.venueAddress,
-                      locality:
-                        components?.locality?.trim() && !prev.locality?.trim()
-                          ? components.locality.trim()
-                          : prev.locality
-                    }));
-                  }}
-                />
-              </div>
-            ) : (
-              <p className="text-sm text-ink-600 mb-4">Please enter a venue address above to see the map.</p>
-            )}
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="block text-sm font-medium text-ink-700 mb-1">Latitude</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={formData.latitude}
-                  onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-                  className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm"
-                  placeholder="e.g., 28.6139"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-700 mb-1">Longitude</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={formData.longitude}
-                  onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-                  className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm"
-                  placeholder="e.g., 77.2090"
-                />
-              </div>
-            </div>
-            <p className="text-xs text-ink-600 mt-2">
-              Enter your address above and click "Get Location" on the map, or click directly on the map to select a location.
-            </p>
           </div>
 
           {/* Submit Button */}

@@ -11,6 +11,7 @@ import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
+import { AddressAutocompleteInput } from "@/components/forms/address-autocomplete-input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 
@@ -616,93 +617,114 @@ export default function ProfilePage() {
                   {...hostForm.register("interests")}
                   error={hostForm.formState.errors.interests?.message as string | undefined}
                 />
-                <Input
-                  label="Venue name"
-                  placeholder="e.g. Vishal's Home Kitchen"
-                  {...hostForm.register("venueName")}
-                  error={hostForm.formState.errors.venueName?.message}
-                />
-                <div>
+                <div className="space-y-4 rounded-2xl border border-sand-200 bg-white/50 p-4">
+                  <h3 className="font-display text-lg font-semibold text-ink-900">Venue information</h3>
                   <Input
-                    label="Venue address"
-                    placeholder="Full address (e.g., 123 Main Street, Indiranagar, Bengaluru)"
-                    {...hostForm.register("venueAddress")}
-                    error={hostForm.formState.errors.venueAddress?.message}
+                    label="Venue name"
+                    placeholder="e.g. Vishal's Home Kitchen"
+                    {...hostForm.register("venueName")}
+                    error={hostForm.formState.errors.venueName?.message}
                   />
-                  {isAutoFilling && (
-                    <p className="mt-1 text-xs text-ink-600">Auto-filling address details...</p>
-                  )}
-                </div>
-                <Input
-                  label="Locality"
-                  placeholder="e.g., Indiranagar (auto-filled from address or postal code)"
-                  value={locality}
-                  onChange={(e) => setLocality(e.target.value)}
-                />
-                <Input
-                  label="City"
-                  placeholder="e.g., Bengaluru (auto-filled from address or postal code)"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                />
-                <Input
-                  label="State"
-                  placeholder="e.g., Karnataka (auto-filled from address or postal code)"
-                  value={state}
-                  onChange={(e) => setState(e.target.value)}
-                />
-                <Input
-                  label="Country"
-                  placeholder="e.g., India (auto-filled from address)"
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                />
-                <Input
-                  label="Postal Code"
-                  placeholder="e.g., 560038 (enter to auto-fill locality, city, state)"
-                  value={postalCode}
-                  onChange={(e) => setPostalCode(e.target.value)}
-                />
-
-                <div className="rounded-2xl border border-sand-200 bg-white/50 p-4">
-                  <div className="text-sm font-medium text-ink-900 mb-1">Venue location on map</div>
-                  <p className="text-xs text-ink-600 mb-3">
-                    Edit the address field above; the map will <strong>automatically</strong> look up latitude and
-                    longitude after you pause typing. You can also use <strong>Get Location</strong> or click the map
-                    to adjust the pin.
-                  </p>
-                  {(hostForm.watch("venueAddress") || "").trim().length >= 5 ? (
-                    <AddressMap
-                      address={(hostForm.watch("venueAddress") || "").trim()}
-                      latitude={latitude}
-                      longitude={longitude}
-                      editable
-                      onLocationSelect={(addr, lat, lng, components) => {
-                        setLatitude(lat);
-                        setLongitude(lng);
-                        if (addr?.trim()) {
-                          hostForm.setValue("venueAddress", addr.trim(), { shouldDirty: true });
-                        }
-                        if (components) {
-                          setLocality((prev) => (prev?.trim() ? prev : components.locality?.trim() || prev));
-                          setCity((prev) => (prev?.trim() ? prev : components.city?.trim() || prev));
-                          setState((prev) => (prev?.trim() ? prev : components.state?.trim() || prev));
-                          setCountry((prev) => (prev?.trim() ? prev : components.country?.trim() || prev));
-                          setPostalCode((prev) => (prev?.trim() ? prev : components.postalCode?.trim() || prev));
-                        }
+                  <div>
+                    <AddressAutocompleteInput
+                      label="Venue address"
+                      placeholder="Full address (e.g., 123 Main Street, Indiranagar, Bengaluru)"
+                      value={hostForm.watch("venueAddress") || ""}
+                      onChange={(v) =>
+                        hostForm.setValue("venueAddress", v, { shouldDirty: true, shouldValidate: true })
+                      }
+                      error={hostForm.formState.errors.venueAddress?.message}
+                      onPickSuggestion={(s) => {
+                        hostForm.setValue("venueAddress", s.displayName, {
+                          shouldDirty: true,
+                          shouldValidate: true
+                        });
+                        setLatitude(s.latitude);
+                        setLongitude(s.longitude);
+                        setLocality((prev) => (prev?.trim() ? prev : s.locality?.trim() || prev));
+                        setCity((prev) => (prev?.trim() ? prev : s.city?.trim() || prev));
+                        setState((prev) => (prev?.trim() ? prev : s.state?.trim() || prev));
+                        setCountry((prev) => (prev?.trim() ? prev : s.country?.trim() || prev));
+                        setPostalCode((prev) => (prev?.trim() ? prev : s.postalCode?.trim() || prev));
                       }}
                     />
-                  ) : (
-                    <p className="text-sm text-ink-600">Enter at least a few characters of your venue address to load the map.</p>
-                  )}
-                  {(latitude !== null || longitude !== null) && (
-                    <p className="mt-2 text-xs text-ink-500">
-                      Saved coordinates:{" "}
-                      {latitude != null && longitude != null
-                        ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
-                        : "—"}
+                    {isAutoFilling && (
+                      <p className="mt-1 text-xs text-ink-600">Auto-filling address details...</p>
+                    )}
+                  </div>
+                  <Input
+                    label="Locality"
+                    placeholder="e.g., Indiranagar (auto-filled from address or postal code)"
+                    value={locality}
+                    onChange={(e) => setLocality(e.target.value)}
+                  />
+                  <Input
+                    label="City"
+                    placeholder="e.g., Bengaluru (auto-filled from address or postal code)"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                  />
+                  <Input
+                    label="State"
+                    placeholder="e.g., Karnataka (auto-filled from address or postal code)"
+                    value={state}
+                    onChange={(e) => setState(e.target.value)}
+                  />
+                  <Input
+                    label="Country"
+                    placeholder="e.g., India (auto-filled from address)"
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                  />
+                  <Input
+                    label="Postal Code"
+                    placeholder="e.g., 560038 (enter to auto-fill locality, city, state)"
+                    value={postalCode}
+                    onChange={(e) => setPostalCode(e.target.value)}
+                  />
+
+                  <div className="border-t border-sand-200 pt-4">
+                    <div className="text-sm font-medium text-ink-900 mb-1">Map &amp; coordinates</div>
+                    <p className="text-xs text-ink-600 mb-3">
+                      The map updates when you pause typing on the address, or use <strong>Get Location</strong> / click
+                      the map to adjust the pin.
                     </p>
-                  )}
+                    {(hostForm.watch("venueAddress") || "").trim().length >= 5 ? (
+                      <AddressMap
+                        address={(hostForm.watch("venueAddress") || "").trim()}
+                        latitude={latitude}
+                        longitude={longitude}
+                        editable
+                        autoForwardGeocodeOnAddressChange={false}
+                        onLocationSelect={(addr, lat, lng, components) => {
+                          setLatitude(lat);
+                          setLongitude(lng);
+                          if (addr?.trim()) {
+                            hostForm.setValue("venueAddress", addr.trim(), { shouldDirty: true });
+                          }
+                          if (components) {
+                            setLocality((prev) => (prev?.trim() ? prev : components.locality?.trim() || prev));
+                            setCity((prev) => (prev?.trim() ? prev : components.city?.trim() || prev));
+                            setState((prev) => (prev?.trim() ? prev : components.state?.trim() || prev));
+                            setCountry((prev) => (prev?.trim() ? prev : components.country?.trim() || prev));
+                            setPostalCode((prev) => (prev?.trim() ? prev : components.postalCode?.trim() || prev));
+                          }
+                        }}
+                      />
+                    ) : (
+                      <p className="text-sm text-ink-600">
+                        Enter at least a few characters of your venue address to load the map.
+                      </p>
+                    )}
+                    {(latitude !== null || longitude !== null) && (
+                      <p className="mt-2 text-xs text-ink-500">
+                        Saved coordinates:{" "}
+                        {latitude != null && longitude != null
+                          ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
+                          : "—"}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <Input

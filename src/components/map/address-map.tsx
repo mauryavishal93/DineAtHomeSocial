@@ -58,6 +58,13 @@ interface AddressMapProps {
   allowAddressGeocode?: boolean;
   /** View mode: wrapper around the Leaflet map (default `aspect-video …`). */
   mapContainerClassName?: string;
+  /**
+   * When `true` (default), editable maps forward-geocode after you pause typing and call `onLocationSelect`
+   * with the formatted address (can overwrite the venue field).
+   * Set `false` when the venue field uses autocomplete: only **dropdown pick**, **Get Location**, or **map click**
+   * should push a full address to the parent.
+   */
+  autoForwardGeocodeOnAddressChange?: boolean;
 }
 
 // Component to handle map click events - must be a separate component to use hooks
@@ -195,7 +202,8 @@ export function AddressMap({
   onLocationSelect,
   editable = false,
   allowAddressGeocode = false,
-  mapContainerClassName = "aspect-video rounded-lg overflow-hidden border border-sand-200"
+  mapContainerClassName = "aspect-video rounded-lg overflow-hidden border border-sand-200",
+  autoForwardGeocodeOnAddressChange = true
 }: AddressMapProps) {
   const [mounted, setMounted] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -337,8 +345,8 @@ export function AddressMap({
 
   // Auto-geocode when address changes (with debounce) - always update coordinates when address changes
   useEffect(() => {
-    if (!mounted || !editable) return;
-    
+    if (!mounted || !editable || !autoForwardGeocodeOnAddressChange) return;
+
     const currentAddress = address?.trim() || "";
     const previousAddress = previousAddressRef.current?.trim() || "";
     
@@ -361,11 +369,11 @@ export function AddressMap({
 
     return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, mounted, editable]);
+  }, [address, mounted, editable, autoForwardGeocodeOnAddressChange]);
 
   // Auto-geocode when component mounts with an address
   useEffect(() => {
-    if (!mounted || !editable) return;
+    if (!mounted || !editable || !autoForwardGeocodeOnAddressChange) return;
     const currentAddress = address?.trim() || "";
     if (currentAddress && currentAddress.length >= 10) {
       // Set previous address to prevent duplicate geocoding on mount
@@ -377,7 +385,7 @@ export function AddressMap({
       return () => clearTimeout(timeoutId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, editable]);
+  }, [mounted, editable, autoForwardGeocodeOnAddressChange]);
 
   async function geocodeAddress(addressToGeocode: string) {
     if (!addressToGeocode.trim()) {

@@ -15,6 +15,7 @@ import { Alert } from "@/components/ui/alert";
 import { apiFetch } from "@/lib/http";
 import { setSession } from "@/lib/session";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { AddressAutocompleteInput } from "@/components/forms/address-autocomplete-input";
 
 // Dynamically import AddressMap to avoid SSR issues with Leaflet
 const AddressMap = dynamic(() => import("@/components/map/address-map").then((mod) => mod.AddressMap), {
@@ -183,11 +184,17 @@ export function HostRegisterForm() {
         error={errors.venueName?.message}
       />
 
-      <Input
+      <AddressAutocompleteInput
         label="Venue address"
         placeholder="Street, locality, city"
-        {...register("address")}
+        value={watch("address") || ""}
+        onChange={(v) => setValue("address", v, { shouldDirty: true, shouldValidate: true })}
         error={errors.address?.message}
+        onPickSuggestion={(s) => {
+          setValue("address", s.displayName, { shouldDirty: true, shouldValidate: true });
+          setLatitude(s.latitude);
+          setLongitude(s.longitude);
+        }}
       />
 
       {address && address.trim().length > 0 ? (
@@ -198,6 +205,7 @@ export function HostRegisterForm() {
             longitude={longitude}
             onLocationSelect={handleLocationSelect}
             editable={true}
+            autoForwardGeocodeOnAddressChange={false}
           />
         </div>
       ) : (
